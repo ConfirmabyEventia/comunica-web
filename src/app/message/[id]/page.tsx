@@ -229,17 +229,7 @@ export default async function PublicMessagePage({
           }}
         >
 
-          <div
-  style={{
-    background: "red",
-    color: "white",
-    padding: "10px",
-    marginBottom: "20px",
-    fontWeight: 700,
-  }}
->
-  PRUEBA HTML NUEVA
-</div>
+ 
           {hasHtml ? (
             <div
               dangerouslySetInnerHTML={{
