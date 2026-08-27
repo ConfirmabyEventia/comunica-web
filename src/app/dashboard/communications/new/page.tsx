@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
   useEffect,
+  Suspense,
   type CSSProperties,
   type MouseEvent,
   type ChangeEvent,
@@ -180,7 +181,7 @@ const imageSizes = [
   },
 ];
 
-export default function NewCommunicationPage() {
+function NewCommunicationPageContent() {
   const [internalName, setInternalName] = useState("");
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
@@ -2712,6 +2713,29 @@ export default function NewCommunicationPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+
+export default function NewCommunicationPage() {
+  return (
+    <Suspense fallback={
+      <div
+        style={{
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: "var(--color-background)",
+          color: "var(--color-text-secondary)",
+          fontFamily: "var(--font-body)",
+        }}
+      >
+        Cargando...
+      </div>
+    }>
+      <NewCommunicationPageContent />
+    </Suspense>
   );
 }
 
