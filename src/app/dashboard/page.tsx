@@ -1,41 +1,109 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import Sidebar from "@/components/studio/Sidebar";
+import { supabase } from "@/lib/supabase/client";
 
-type CommunicationStatus = "Borrador" | "Enviada";
+type CommunicationStatus =
+  | "Borrador"
+  | "Enviada";
 
 type Communication = {
   id: string;
+  internal_name: string;
   title: string;
-  event: string;
+  message: string;
   status: CommunicationStatus;
-  activity?: string;
+  created_at: string;
+  updated_at: string;
 };
 
-// Datos temporales.
-// Más adelante los conectaremos con la base de datos.
-const communications: Communication[] = [];
-
 export default function DashboardPage() {
-  const totalCommunications = communications.length;
+  const [communications, setCommunications] =
+    useState<Communication[]>([]);
 
-  const draftCount = communications.filter(
-    (communication) => communication.status === "Borrador"
-  ).length;
+  const [loading, setLoading] =
+    useState(true);
 
-  const sentCount = communications.filter(
-    (communication) => communication.status === "Enviada"
-  ).length;
+  const [error, setError] =
+    useState("");
 
-  const recentCommunications = communications.slice(0, 5);
+  useEffect(() => {
+    loadCommunications();
+  }, []);
+
+  async function loadCommunications() {
+    try {
+      setLoading(true);
+      setError("");
+
+      const { data, error: fetchError } =
+        await supabase
+          .from("communications")
+          .select(
+            `
+              id,
+              internal_name,
+              title,
+              message,
+              status,
+              created_at,
+              updated_at
+            `
+          )
+          .order("created_at", {
+            ascending: false,
+          });
+
+      if (fetchError) {
+        throw fetchError;
+      }
+
+      setCommunications(
+        (data ?? []) as Communication[]
+      );
+    } catch (err) {
+      console.error(
+        "Error loading dashboard communications:",
+        err
+      );
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "No fue posible cargar las comunicaciones."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const totalCommunications =
+    communications.length;
+
+  const draftCount =
+    communications.filter(
+      (communication) =>
+        communication.status === "Borrador"
+    ).length;
+
+  const sentCount =
+    communications.filter(
+      (communication) =>
+        communication.status === "Enviada"
+    ).length;
+
+  const recentCommunications =
+    communications.slice(0, 5);
 
   return (
     <div
       style={{
         minHeight: "100vh",
         display: "flex",
-        background: "var(--color-background)",
+        background:
+          "var(--color-background)",
       }}
     >
       <Sidebar />
@@ -59,7 +127,8 @@ export default function DashboardPage() {
             style={{
               background:
                 "linear-gradient(135deg, #FBF9F4 0%, #F7F2E9 100%)",
-              border: "1px solid var(--color-border)",
+              border:
+                "1px solid var(--color-border)",
               borderRadius: "26px",
               padding: "42px 48px",
               marginBottom: "42px",
@@ -68,11 +137,14 @@ export default function DashboardPage() {
             <p
               style={{
                 margin: 0,
-                fontFamily: "var(--font-body)",
+                fontFamily:
+                  "var(--font-body)",
                 fontSize: "0.72rem",
                 letterSpacing: "0.2em",
-                textTransform: "uppercase",
-                color: "var(--color-accent)",
+                textTransform:
+                  "uppercase",
+                color:
+                  "var(--color-accent)",
               }}
             >
               EVENSSE
@@ -81,29 +153,53 @@ export default function DashboardPage() {
             <h1
               style={{
                 margin: "10px 0 0",
-                fontFamily: "var(--font-display)",
+                fontFamily:
+                  "var(--font-display)",
                 fontSize: "3.5rem",
                 fontWeight: 500,
                 lineHeight: 1.05,
-                color: "var(--color-text)",
-                letterSpacing: "-0.02em",
+                color:
+                  "var(--color-text)",
+                letterSpacing:
+                  "-0.02em",
               }}
             >
-             Bienvenida a Comunica Studio
+              Bienvenida a Comunica Studio
             </h1>
 
             <p
               style={{
                 margin: "14px 0 0",
-                fontFamily: "var(--font-body)",
+                fontFamily:
+                  "var(--font-body)",
                 fontSize: "1.05rem",
                 lineHeight: 1.6,
-                color: "var(--color-text-secondary)",
+                color:
+                  "var(--color-text-secondary)",
               }}
             >
               Gestiona las comunicaciones de tus eventos desde un solo lugar.
             </p>
           </section>
+
+          {/* ERROR */}
+
+          {error && (
+            <section
+              style={{
+                marginBottom: "28px",
+                padding: "16px 18px",
+                borderRadius: "16px",
+                background: "#FBF4F1",
+                border:
+                  "1px solid #E8D8D1",
+                color: "#765F56",
+                fontSize: "0.9rem",
+              }}
+            >
+              {error}
+            </section>
+          )}
 
           {/* SUMMARY */}
 
@@ -120,11 +216,13 @@ export default function DashboardPage() {
               <h2
                 style={{
                   margin: 0,
-                  fontFamily: "var(--font-display)",
+                  fontFamily:
+                    "var(--font-display)",
                   fontSize: "2.35rem",
                   fontWeight: 500,
                   lineHeight: 1.1,
-                  color: "var(--color-text)",
+                  color:
+                    "var(--color-text)",
                 }}
               >
                 Resumen
@@ -134,7 +232,8 @@ export default function DashboardPage() {
                 style={{
                   margin: "8px 0 0",
                   fontSize: "1rem",
-                  color: "var(--color-text-secondary)",
+                  color:
+                    "var(--color-text-secondary)",
                 }}
               >
                 Una vista general de tus comunicaciones.
@@ -144,25 +243,38 @@ export default function DashboardPage() {
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                gridTemplateColumns:
+                  "repeat(3, minmax(0, 1fr))",
                 gap: "18px",
               }}
             >
               <SummaryCard
                 label="Total de comunicaciones"
-                value={totalCommunications}
+                value={
+                  loading
+                    ? "—"
+                    : totalCommunications
+                }
                 description="Todas tus comunicaciones"
               />
 
               <SummaryCard
                 label="Borradores"
-                value={draftCount}
+                value={
+                  loading
+                    ? "—"
+                    : draftCount
+                }
                 description="Comunicaciones en proceso"
               />
 
               <SummaryCard
                 label="Enviadas"
-                value={sentCount}
+                value={
+                  loading
+                    ? "—"
+                    : sentCount
+                }
                 description="Comunicaciones enviadas"
               />
             </div>
@@ -183,11 +295,13 @@ export default function DashboardPage() {
               <h2
                 style={{
                   margin: 0,
-                  fontFamily: "var(--font-display)",
+                  fontFamily:
+                    "var(--font-display)",
                   fontSize: "2.35rem",
                   fontWeight: 500,
                   lineHeight: 1.1,
-                  color: "var(--color-text)",
+                  color:
+                    "var(--color-text)",
                 }}
               >
                 Actividad reciente
@@ -197,7 +311,8 @@ export default function DashboardPage() {
                 style={{
                   margin: "8px 0 0",
                   fontSize: "1rem",
-                  color: "var(--color-text-secondary)",
+                  color:
+                    "var(--color-text-secondary)",
                 }}
               >
                 Lo último que ha ocurrido en Comunica.
@@ -206,21 +321,34 @@ export default function DashboardPage() {
 
             <section
               style={{
-                background: "var(--color-surface)",
-                border: "1px solid var(--color-border)",
+                background:
+                  "var(--color-surface)",
+                border:
+                  "1px solid var(--color-border)",
                 borderRadius: "24px",
                 overflow: "hidden",
               }}
             >
-              {communications.length === 0 ? (
+              {loading ? (
+                <LoadingRow />
+              ) : communications.length ===
+                0 ? (
                 <EmptyActivity />
               ) : (
-                communications.slice(0, 5).map((communication, index) => (
-                  <ActivityRow
-                    key={`${communication.id}-${index}`}
-                    communication={communication}
-                  />
-                ))
+                communications
+                  .slice(0, 5)
+                  .map(
+                    (communication) => (
+                      <ActivityRow
+                        key={
+                          communication.id
+                        }
+                        communication={
+                          communication
+                        }
+                      />
+                    )
+                  )
               )}
             </section>
           </section>
@@ -231,8 +359,10 @@ export default function DashboardPage() {
             <div
               style={{
                 display: "flex",
-                alignItems: "flex-end",
-                justifyContent: "space-between",
+                alignItems:
+                  "flex-end",
+                justifyContent:
+                  "space-between",
                 gap: "24px",
                 marginBottom: "20px",
               }}
@@ -241,11 +371,13 @@ export default function DashboardPage() {
                 <h2
                   style={{
                     margin: 0,
-                    fontFamily: "var(--font-display)",
+                    fontFamily:
+                      "var(--font-display)",
                     fontSize: "2.35rem",
                     fontWeight: 500,
                     lineHeight: 1.1,
-                    color: "var(--color-text)",
+                    color:
+                      "var(--color-text)",
                   }}
                 >
                   Últimas comunicaciones
@@ -255,7 +387,8 @@ export default function DashboardPage() {
                   style={{
                     margin: "8px 0 0",
                     fontSize: "1rem",
-                    color: "var(--color-text-secondary)",
+                    color:
+                      "var(--color-text-secondary)",
                   }}
                 >
                   Accede rápidamente a tus comunicaciones más recientes.
@@ -266,33 +399,57 @@ export default function DashboardPage() {
                 href="/dashboard/communications"
                 style={{
                   fontSize: "0.92rem",
-                  color: "var(--color-accent)",
+                  color:
+                    "var(--color-accent)",
                   textDecoration: "none",
                   fontWeight: 500,
-                  whiteSpace: "nowrap",
+                  whiteSpace:
+                    "nowrap",
                 }}
               >
                 Ver todas →
               </Link>
             </div>
 
-            {recentCommunications.length === 0 ? (
-              <EmptyCommunications />
-            ) : (
+            {loading ? (
               <section
                 style={{
-                  background: "var(--color-surface)",
-                  border: "1px solid var(--color-border)",
+                  background:
+                    "var(--color-surface)",
+                  border:
+                    "1px solid var(--color-border)",
                   borderRadius: "24px",
                   overflow: "hidden",
                 }}
               >
-                {recentCommunications.map((communication) => (
-                  <CommunicationRow
-                    key={communication.id}
-                    communication={communication}
-                  />
-                ))}
+                <LoadingRow />
+              </section>
+            ) : recentCommunications.length ===
+              0 ? (
+              <EmptyCommunications />
+            ) : (
+              <section
+                style={{
+                  background:
+                    "var(--color-surface)",
+                  border:
+                    "1px solid var(--color-border)",
+                  borderRadius: "24px",
+                  overflow: "hidden",
+                }}
+              >
+                {recentCommunications.map(
+                  (communication) => (
+                    <CommunicationRow
+                      key={
+                        communication.id
+                      }
+                      communication={
+                        communication
+                      }
+                    />
+                  )
+                )}
               </section>
             )}
           </section>
@@ -312,14 +469,16 @@ function SummaryCard({
   description,
 }: {
   label: string;
-  value: number;
+  value: number | string;
   description: string;
 }) {
   return (
     <div
       style={{
-        background: "var(--color-surface)",
-        border: "1px solid var(--color-border)",
+        background:
+          "var(--color-surface)",
+        border:
+          "1px solid var(--color-border)",
         borderRadius: "22px",
         padding: "26px",
       }}
@@ -329,8 +488,10 @@ function SummaryCard({
           margin: 0,
           fontSize: "0.76rem",
           letterSpacing: "0.08em",
-          textTransform: "uppercase",
-          color: "var(--color-text-secondary)",
+          textTransform:
+            "uppercase",
+          color:
+            "var(--color-text-secondary)",
         }}
       >
         {label}
@@ -339,11 +500,13 @@ function SummaryCard({
       <div
         style={{
           marginTop: "13px",
-          fontFamily: "var(--font-display)",
+          fontFamily:
+            "var(--font-display)",
           fontSize: "2.8rem",
           fontWeight: 500,
           lineHeight: 1,
-          color: "var(--color-text)",
+          color:
+            "var(--color-text)",
         }}
       >
         {value}
@@ -353,11 +516,32 @@ function SummaryCard({
         style={{
           margin: "10px 0 0",
           fontSize: "0.88rem",
-          color: "var(--color-text-secondary)",
+          color:
+            "var(--color-text-secondary)",
         }}
       >
         {description}
       </p>
+    </div>
+  );
+}
+
+/* =========================================================
+   LOADING
+========================================================= */
+
+function LoadingRow() {
+  return (
+    <div
+      style={{
+        padding: "32px 26px",
+        textAlign: "center",
+        fontSize: "0.9rem",
+        color:
+          "var(--color-text-secondary)",
+      }}
+    >
+      Cargando comunicaciones...
     </div>
   );
 }
@@ -377,9 +561,11 @@ function EmptyActivity() {
       <p
         style={{
           margin: 0,
-          fontFamily: "var(--font-display)",
+          fontFamily:
+            "var(--font-display)",
           fontSize: "1.45rem",
-          color: "var(--color-text)",
+          color:
+            "var(--color-text)",
         }}
       >
         Aún no hay actividad
@@ -391,7 +577,8 @@ function EmptyActivity() {
           margin: "8px auto 0",
           fontSize: "0.94rem",
           lineHeight: 1.6,
-          color: "var(--color-text-secondary)",
+          color:
+            "var(--color-text-secondary)",
         }}
       >
         La actividad de tus comunicaciones aparecerá aquí.
@@ -409,6 +596,10 @@ function ActivityRow({
 }: {
   communication: Communication;
 }) {
+  const isSent =
+    communication.status ===
+    "Enviada";
+
   return (
     <div
       style={{
@@ -416,7 +607,8 @@ function ActivityRow({
         alignItems: "center",
         gap: "16px",
         padding: "20px 26px",
-        borderBottom: "1px solid var(--color-border)",
+        borderBottom:
+          "1px solid var(--color-border)",
       }}
     >
       <div
@@ -426,7 +618,8 @@ function ActivityRow({
           flexShrink: 0,
           borderRadius: "50%",
           background: "#F7F3EB",
-          border: "1px solid #EEE7DA",
+          border:
+            "1px solid #EEE7DA",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -442,7 +635,13 @@ function ActivityRow({
           strokeLinecap="round"
           strokeLinejoin="round"
         >
-          <rect x="3" y="5" width="18" height="14" rx="2" />
+          <rect
+            x="3"
+            y="5"
+            width="18"
+            height="14"
+            rx="2"
+          />
           <path d="m3 7 9 6 9-6" />
         </svg>
       </div>
@@ -457,29 +656,56 @@ function ActivityRow({
           style={{
             margin: 0,
             fontSize: "0.95rem",
-            color: "var(--color-text)",
+            color:
+              "var(--color-text)",
           }}
         >
           Comunicación{" "}
-          <strong style={{ fontWeight: 600 }}>
+          <strong
+            style={{
+              fontWeight: 600,
+            }}
+          >
             {communication.title}
-          </strong>{" "}
-          · {communication.event}
+          </strong>
         </p>
 
         <p
           style={{
             margin: "4px 0 0",
             fontSize: "0.82rem",
-            color: "var(--color-text-secondary)",
+            color:
+              "var(--color-text-secondary)",
           }}
         >
-          {communication.activity ??
-            (communication.status === "Enviada"
-              ? "Comunicación enviada"
-              : "Comunicación creada")}
+          {isSent
+            ? "Comunicación enviada"
+            : "Comunicación creada"}
+          {" · "}
+          {formatDate(
+            communication.created_at
+          )}
         </p>
       </div>
+
+      <span
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          borderRadius: "999px",
+          padding: "7px 12px",
+          background: isSent
+            ? "#EEF4EE"
+            : "#F7F3EB",
+          color: isSent
+            ? "#536B55"
+            : "var(--color-accent)",
+          fontSize: "0.76rem",
+          fontWeight: 500,
+        }}
+      >
+        {communication.status}
+      </span>
     </div>
   );
 }
@@ -493,8 +719,10 @@ function EmptyCommunications() {
     <section
       style={{
         minHeight: "300px",
-        background: "var(--color-surface)",
-        border: "1px solid var(--color-border)",
+        background:
+          "var(--color-surface)",
+        border:
+          "1px solid var(--color-border)",
         borderRadius: "24px",
         display: "flex",
         alignItems: "center",
@@ -511,7 +739,8 @@ function EmptyCommunications() {
             margin: "0 auto 22px",
             borderRadius: "50%",
             background: "#F7F3EB",
-            border: "1px solid #EEE7DA",
+            border:
+              "1px solid #EEE7DA",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -527,7 +756,13 @@ function EmptyCommunications() {
             strokeLinecap="round"
             strokeLinejoin="round"
           >
-            <rect x="3" y="5" width="18" height="14" rx="2" />
+            <rect
+              x="3"
+              y="5"
+              width="18"
+              height="14"
+              rx="2"
+            />
             <path d="m3 7 9 6 9-6" />
           </svg>
         </div>
@@ -535,10 +770,12 @@ function EmptyCommunications() {
         <h3
           style={{
             margin: 0,
-            fontFamily: "var(--font-display)",
+            fontFamily:
+              "var(--font-display)",
             fontSize: "1.85rem",
             fontWeight: 500,
-            color: "var(--color-text)",
+            color:
+              "var(--color-text)",
           }}
         >
           Aún no tienes comunicaciones
@@ -550,7 +787,8 @@ function EmptyCommunications() {
             margin: "12px auto 0",
             fontSize: "0.95rem",
             lineHeight: 1.65,
-            color: "var(--color-text-secondary)",
+            color:
+              "var(--color-text-secondary)",
           }}
         >
           Tus comunicaciones aparecerán aquí una vez que hayas creado la
@@ -570,41 +808,46 @@ function CommunicationRow({
 }: {
   communication: Communication;
 }) {
-  const isSent = communication.status === "Enviada";
+  const isSent =
+    communication.status ===
+    "Enviada";
 
   return (
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: "1.5fr 1.2fr 130px 150px",
+        gridTemplateColumns:
+          "1.7fr 160px 150px",
         alignItems: "center",
         gap: "20px",
         padding: "22px 26px",
-        borderBottom: "1px solid var(--color-border)",
+        borderBottom:
+          "1px solid var(--color-border)",
       }}
     >
       <div>
         <p
           style={{
             margin: 0,
-            fontFamily: "var(--font-display)",
+            fontFamily:
+              "var(--font-display)",
             fontSize: "1.2rem",
-            color: "var(--color-text)",
+            color:
+              "var(--color-text)",
           }}
         >
           {communication.title}
         </p>
-      </div>
 
-      <div>
         <p
           style={{
-            margin: 0,
-            fontSize: "0.9rem",
-            color: "var(--color-text-secondary)",
+            margin: "5px 0 0",
+            fontSize: "0.78rem",
+            color:
+              "var(--color-text-secondary)",
           }}
         >
-          {communication.event}
+          {communication.internal_name}
         </p>
       </div>
 
@@ -615,8 +858,12 @@ function CommunicationRow({
             alignItems: "center",
             borderRadius: "999px",
             padding: "7px 12px",
-            background: isSent ? "#EEF4EE" : "#F7F3EB",
-            color: isSent ? "#536B55" : "var(--color-accent)",
+            background: isSent
+              ? "#EEF4EE"
+              : "#F7F3EB",
+            color: isSent
+              ? "#536B55"
+              : "var(--color-accent)",
             fontSize: "0.8rem",
             fontWeight: 500,
           }}
@@ -628,15 +875,30 @@ function CommunicationRow({
       <Link
         href={`/dashboard/communications/${communication.id}`}
         style={{
-          color: "var(--color-accent)",
+          color:
+            "var(--color-accent)",
           textDecoration: "none",
           fontSize: "0.9rem",
           fontWeight: 500,
-          whiteSpace: "nowrap",
+          whiteSpace:
+            "nowrap",
         }}
       >
         Ver comunicación →
       </Link>
     </div>
   );
+}
+
+function formatDate(
+  date: string
+) {
+  return new Intl.DateTimeFormat(
+    "es-CO",
+    {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    }
+  ).format(new Date(date));
 }

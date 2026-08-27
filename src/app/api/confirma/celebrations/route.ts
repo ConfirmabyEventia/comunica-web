@@ -1,55 +1,63 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase/client";
+
+import { confirmaServer } from "@/lib/confirmaServer";
 
 export async function GET() {
   try {
-    const { data, error } = await supabase
+    const {
+      data,
+      error,
+    } = await confirmaServer
       .from("celebrations")
       .select(
         `
-        id,
-        celebration_code,
-        name,
-        event_date,
-        status,
-        guest_count
+          id,
+          name,
+          event_date,
+          important_details
         `
       )
+      .neq("status", "archived")
       .order("event_date", {
         ascending: true,
       });
 
     if (error) {
       console.error(
-        "Error loading CONFIRMA celebrations:",
+        "ERROR LEYENDO CELEBRACIONES DE CONFIRMA:",
         error
       );
 
       return NextResponse.json(
         {
-          ok: false,
-          error: error.message,
+          error:
+            "No fue posible cargar las celebraciones de CONFIRMA.",
         },
-        { status: 500 }
+        {
+          status: 500,
+        }
       );
     }
 
     return NextResponse.json({
-      ok: true,
       celebrations: data ?? [],
     });
   } catch (error) {
     console.error(
-      "Unexpected CONFIRMA celebrations error:",
+      "ERROR EN API CONFIRMA:",
       error
     );
 
     return NextResponse.json(
       {
-        ok: false,
-        error: "No fue posible consultar las celebraciones de CONFIRMA.",
+        error:
+          error instanceof Error
+            ? error.message
+            : "Error inesperado.",
       },
-      { status: 500 }
+      {
+        status: 500,
+      }
     );
   }
 }

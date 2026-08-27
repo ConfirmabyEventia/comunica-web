@@ -50,7 +50,7 @@ function CommunicationIcon({ active }: { active: boolean }) {
   );
 }
 
-function PeopleIcon({ active }: { active: boolean }) {
+function TablesIcon({ active }: { active: boolean }) {
   return (
     <svg
       width="20"
@@ -66,10 +66,9 @@ function PeopleIcon({ active }: { active: boolean }) {
       strokeLinecap="round"
       strokeLinejoin="round"
     >
-      <circle cx="9" cy="8" r="3" />
-      <path d="M3.5 19c.5-3.2 2.4-5 5.5-5s5 1.8 5.5 5" />
-      <path d="M16 5.5a3 3 0 0 1 0 5.8" />
-      <path d="M17 14c2.1.5 3.3 2.1 3.7 4.5" />
+      <circle cx="12" cy="8" r="3" />
+      <path d="M5 20c.7-3.6 3-5.5 7-5.5s6.3 1.9 7 5.5" />
+      <path d="M4 12h16" />
     </svg>
   );
 }
@@ -132,9 +131,9 @@ const navigation = [
     icon: CommunicationIcon,
   },
   {
-    label: "Personas",
-    href: "/dashboard/people",
-    icon: PeopleIcon,
+    label: "Mesas",
+    href: "/dashboard/tables",
+    icon: TablesIcon,
   },
   {
     label: "Códigos",

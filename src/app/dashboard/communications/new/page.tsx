@@ -1,28 +1,669 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import {
+  useRef,
+  useState,
+  useEffect,
+  type CSSProperties,
+  type MouseEvent,
+  type ChangeEvent,
+} from "react";
+import Sidebar from "@/components/studio/Sidebar";
 import { supabase } from "@/lib/supabase/client";
+
+type Celebration = {
+  id: string;
+  name: string;
+  event_date: string;
+  important_details: ImportantDetail[] | null;
+};
+
+type ColorTheme = {
+  id: string;
+  name: string;
+  color: string;
+  soft: string;
+};
+
+type ImportantDetail = {
+  id: string;
+  type: string;
+  title: string;
+  titleEn?: string;
+
+  date?: string;
+  time?: string;
+
+  location?: string;
+  locationEn?: string;
+
+  address?: string;
+  addressEn?: string;
+
+  dressCodeWomen?: string;
+  dressCodeWomenEn?: string;
+
+  dressCodeMen?: string;
+  dressCodeMenEn?: string;
+
+  description?: string;
+  descriptionEn?: string;
+};
+
+type Typography = {
+  id: string;
+  name: string;
+  font: string;
+  fontFamily: string;
+  sample: string;
+};
+
+const colorThemes: ColorTheme[] = [
+  {
+    id: "salvia",
+    name: "Salvia",
+    color: "#A7A98A",
+    soft: "#EEF0E7",
+  },
+  {
+    id: "lavanda",
+    name: "Lavanda",
+    color: "#B8A5BD",
+    soft: "#F1EBF3",
+  },
+  {
+    id: "terracota",
+    name: "Terracota",
+    color: "#C97A5B",
+    soft: "#F6E9E3",
+  },
+  {
+    id: "arena",
+    name: "Arena",
+    color: "#D8C4A4",
+    soft: "#F5EFE6",
+  },
+  {
+    id: "azul-niebla",
+    name: "Azul Niebla",
+    color: "#7890A1",
+    soft: "#E9EFF2",
+  },
+  {
+    id: "vino",
+    name: "Vino",
+    color: "#76283A",
+    soft: "#F1E4E7",
+  },
+];
+
+const typographyOptions: Typography[] = [
+  {
+    id: "editorial",
+    name: "Editorial",
+    font: "Cormorant Garamond",
+    fontFamily: "'Cormorant Garamond', serif",
+    sample: "Aa",
+  },
+  {
+    id: "clasica",
+    name: "Clásica",
+    font: "Playfair Display",
+    fontFamily: "'Playfair Display', serif",
+    sample: "Aa",
+  },
+  {
+    id: "contemporanea",
+    name: "Contemporánea",
+    font: "Montserrat",
+    fontFamily: "'Montserrat', sans-serif",
+    sample: "Aa",
+  },
+  {
+    id: "romantica",
+    name: "Romántica",
+    font: "Allura",
+    fontFamily: "'Allura', cursive",
+    sample: "Aa",
+  },
+];
+
+const emojis = [
+  "😊",
+  "❤️",
+  "✨",
+  "🥂",
+  "🎉",
+  "💐",
+  "📍",
+  "🗓️",
+  "🤍",
+  "🌿",
+  "💫",
+  "🎶",
+];
+
+const imageSizes = [
+  {
+    id: "small",
+    label: "Pequeña",
+    width: "40%",
+  },
+  {
+    id: "medium",
+    label: "Mediana",
+    width: "60%",
+  },
+  {
+    id: "large",
+    label: "Grande",
+    width: "80%",
+  },
+  {
+    id: "full",
+    label: "Completa",
+    width: "100%",
+  },
+];
 
 export default function NewCommunicationPage() {
   const [internalName, setInternalName] = useState("");
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
-  const [buttonText, setButtonText] = useState("");
-  const [buttonUrl, setButtonUrl] = useState("");
+  const [contentHtml, setContentHtml] = useState("");
+
+  const [selectedColor, setSelectedColor] =
+    useState("lavanda");
+
+  const [selectedTypography, setSelectedTypography] =
+    useState("editorial");
+
+  const [showEmojiPicker, setShowEmojiPicker] =
+    useState(false);
+
+  const [uploadingImage, setUploadingImage] =
+    useState(false);
+
+  const [selectedImage, setSelectedImage] =
+    useState<HTMLImageElement | null>(null);
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [createdId, setCreatedId] = useState<string | null>(null);
+
+  const [celebrations, setCelebrations] = useState<Celebration[]>([]);
+  const [selectedCelebrationId, setSelectedCelebrationId] = useState("");
+  const [loadingCelebrations, setLoadingCelebrations] = useState(false);
+  const [importingDetails, setImportingDetails] = useState(false);
+  const [createdId, setCreatedId] =
+    useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+
+  const editorRef = useRef<HTMLDivElement | null>(null);
+
+  const imageInputRef =
+    useRef<HTMLInputElement | null>(null);
+
+  const savedRangeRef =
+    useRef<Range | null>(null);
+
+  const activeColor =
+    colorThemes.find(
+      (theme) => theme.id === selectedColor
+    ) ?? colorThemes[1];
+
+  const activeTypography =
+    typographyOptions.find(
+      (font) => font.id === selectedTypography
+    ) ?? typographyOptions[0];
 
   const publicUrl = createdId
     ? `https://comunica.evensse.com/message/${createdId}`
     : "";
 
+  function saveCurrentSelection() {
+    const editor = editorRef.current;
+
+    if (!editor) return;
+
+    const selection = window.getSelection();
+
+    if (!selection || selection.rangeCount === 0) {
+      return;
+    }
+
+    const range = selection.getRangeAt(0);
+
+    if (!editor.contains(range.commonAncestorContainer)) {
+      return;
+    }
+
+    savedRangeRef.current = range.cloneRange();
+  }
+
+  function updateContent() {
+    const editor = editorRef.current;
+
+    if (!editor) return;
+
+    const html = editor.innerHTML;
+
+    setContentHtml(html);
+
+    const plainText = editor.innerText
+      .replace(/\u00a0/g, " ")
+      .trim();
+
+    setMessage(plainText);
+  }
+
+  function executeCommand(
+    command:
+      | "bold"
+      | "italic"
+      | "underline"
+      | "justifyLeft"
+      | "justifyCenter"
+      | "justifyRight"
+      | "justifyFull"
+  ) {
+    editorRef.current?.focus();
+
+    document.execCommand(command, false);
+
+    updateContent();
+    saveCurrentSelection();
+  }
+
+  function handleToolbarMouseDown(
+    event: MouseEvent<HTMLButtonElement>
+  ) {
+    event.preventDefault();
+    saveCurrentSelection();
+  }
+
+  function insertEmoji(emoji: string) {
+    const editor = editorRef.current;
+
+    if (!editor) return;
+
+    editor.focus();
+
+    const selection = window.getSelection();
+
+    if (savedRangeRef.current) {
+      selection?.removeAllRanges();
+      selection?.addRange(
+        savedRangeRef.current
+      );
+    }
+
+    document.execCommand(
+      "insertText",
+      false,
+      emoji
+    );
+
+    updateContent();
+    saveCurrentSelection();
+
+    setShowEmojiPicker(false);
+  }
+
+  function openImagePicker() {
+    saveCurrentSelection();
+    imageInputRef.current?.click();
+  }
+
+  async function handleImageChange(
+    event: ChangeEvent<HTMLInputElement>
+  ) {
+    const file = event.target.files?.[0];
+
+    event.target.value = "";
+
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      setError(
+        "Selecciona un archivo de imagen válido."
+      );
+      return;
+    }
+
+    if (file.size > 8 * 1024 * 1024) {
+      setError(
+        "La imagen debe pesar menos de 8 MB."
+      );
+      return;
+    }
+
+    try {
+      setUploadingImage(true);
+      setError("");
+
+      const extension =
+        file.name.split(".").pop() || "jpg";
+
+      const filePath = `${crypto.randomUUID()}.${extension}`;
+
+      const { error: uploadError } =
+        await supabase.storage
+          .from("communication-images")
+          .upload(filePath, file, {
+            cacheControl: "3600",
+            upsert: false,
+            contentType: file.type,
+          });
+
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      const {
+        data: publicUrlData,
+      } = supabase.storage
+        .from("communication-images")
+        .getPublicUrl(filePath);
+
+      const imageUrl =
+        publicUrlData.publicUrl;
+
+      const editor = editorRef.current;
+
+      if (!editor) return;
+
+      editor.focus();
+
+      const selection = window.getSelection();
+
+      if (savedRangeRef.current) {
+        selection?.removeAllRanges();
+        selection?.addRange(
+          savedRangeRef.current
+        );
+      } else {
+        const range =
+          document.createRange();
+
+        range.selectNodeContents(editor);
+        range.collapse(false);
+
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+      }
+
+      const image =
+        document.createElement("img");
+
+      image.src = imageUrl;
+      image.alt = "";
+      image.style.width = "80%";
+      image.style.maxWidth = "100%";
+      image.style.height = "auto";
+      image.style.display = "block";
+      image.style.margin = "18px auto";
+      image.style.borderRadius = "14px";
+      image.style.cursor = "pointer";
+
+      const range = selection?.rangeCount
+        ? selection.getRangeAt(0)
+        : null;
+
+      if (range) {
+        range.deleteContents();
+        range.insertNode(image);
+
+        range.setStartAfter(image);
+        range.collapse(true);
+
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+      } else {
+        editor.appendChild(image);
+      }
+
+      setSelectedImage(image);
+
+      updateContent();
+      saveCurrentSelection();
+    } catch (err) {
+      console.error(
+        "Error uploading communication image:",
+        err
+      );
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "No fue posible subir la imagen."
+      );
+    } finally {
+      setUploadingImage(false);
+    }
+  }
+
+  function handleEditorClick(
+    event: MouseEvent<HTMLDivElement>
+  ) {
+    const target = event.target;
+
+    if (
+      target instanceof HTMLImageElement
+    ) {
+      setSelectedImage(target);
+      return;
+    }
+
+    setSelectedImage(null);
+  }
+
+  function changeImageSize(
+    width: string
+  ) {
+    if (!selectedImage) return;
+
+    selectedImage.style.width = width;
+    selectedImage.style.maxWidth = "100%";
+    selectedImage.style.height = "auto";
+
+    updateContent();
+  }
+
+  useEffect(() => {
+    async function loadCelebrations() {
+      try {
+        setLoadingCelebrations(true);
+
+        const response = await fetch("/api/confirma/celebrations", {
+          method: "GET",
+          cache: "no-store",
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            result?.error ||
+              "No fue posible cargar las celebraciones de CONFIRMA."
+          );
+        }
+
+        setCelebrations(
+          (result?.celebrations || []) as Celebration[]
+        );
+      } catch (err) {
+        console.error("Error cargando celebraciones:", err);
+        setError(
+          err instanceof Error
+            ? err.message
+            : "No fue posible cargar las celebraciones de CONFIRMA."
+        );
+      } finally {
+        setLoadingCelebrations(false);
+      }
+    }
+
+    loadCelebrations();
+  }, []);
+
+  function escapeHtml(value: string) {
+    return value
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function detailToHtml(detail: ImportantDetail) {
+    const lines: string[] = [];
+
+    if (detail.title) {
+      lines.push(
+        `<p style="margin:0 0 10px;"><strong>${escapeHtml(
+          detail.title
+        )}</strong></p>`
+      );
+    }
+
+    if (detail.date || detail.time) {
+      const dateTime = [detail.date, detail.time]
+        .filter(Boolean)
+        .join(" · ");
+
+      lines.push(
+        `<p style="margin:0 0 8px;">🗓️ ${escapeHtml(dateTime)}</p>`
+      );
+    }
+
+    if (detail.location) {
+      lines.push(
+        `<p style="margin:0 0 8px;">📍 ${escapeHtml(
+          detail.location
+        )}</p>`
+      );
+    }
+
+    if (detail.address) {
+      lines.push(
+        `<p style="margin:0 0 8px;">${escapeHtml(
+          detail.address
+        )}</p>`
+      );
+    }
+
+    if (detail.dressCodeWomen || detail.dressCodeMen) {
+      lines.push(
+        `<p style="margin:0 0 8px;"><strong>Código de vestuario</strong></p>`
+      );
+
+      if (detail.dressCodeWomen) {
+        lines.push(
+          `<p style="margin:0 0 6px;">Mujeres: ${escapeHtml(
+            detail.dressCodeWomen
+          )}</p>`
+        );
+      }
+
+      if (detail.dressCodeMen) {
+        lines.push(
+          `<p style="margin:0 0 8px;">Hombres: ${escapeHtml(
+            detail.dressCodeMen
+          )}</p>`
+        );
+      }
+    }
+
+    if (detail.description) {
+      lines.push(
+        `<p style="margin:0 0 12px;">${escapeHtml(
+          detail.description
+        ).replace(/\n/g, "<br />")}</p>`
+      );
+    }
+
+    return lines.join("");
+  }
+
+  function importImportantDetails() {
+    const celebration = celebrations.find(
+      (item) => item.id === selectedCelebrationId
+    );
+
+    if (!celebration) {
+      setError("Selecciona una boda de CONFIRMA.");
+      return;
+    }
+
+    const details = Array.isArray(celebration.important_details)
+      ? celebration.important_details
+      : [];
+
+    if (!details.length) {
+      setError(
+        "Esta boda no tiene detalles importantes guardados en CONFIRMA."
+      );
+      return;
+    }
+
+    try {
+      setImportingDetails(true);
+      setError("");
+
+      const importedHtml = details
+        .map(detailToHtml)
+        .filter(Boolean)
+        .join(
+          '<p style="margin:16px 0;"></p>'
+        );
+
+      const editor = editorRef.current;
+
+      if (!editor) return;
+
+      editor.innerHTML = importedHtml;
+      setContentHtml(importedHtml);
+      setMessage(
+        editor.innerText.replace(/\u00a0/g, " ").trim()
+      );
+
+      setImportingDetails(false);
+    } catch (err) {
+      console.error(
+        "Error importando detalles de CONFIRMA:",
+        err
+      );
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "No fue posible traer los detalles importantes."
+      );
+
+      setImportingDetails(false);
+    }
+  }
+
   async function handleSave() {
-    if (!internalName.trim() || !title.trim() || !message.trim()) {
-      setError("Completa el nombre interno, el título y el mensaje.");
+    const editor = editorRef.current;
+
+    const currentHtml =
+      editor?.innerHTML || contentHtml;
+
+    const plainText =
+      editor?.innerText
+        .replace(/\u00a0/g, " ")
+        .trim() || message.trim();
+
+    if (
+      !internalName.trim() ||
+      !title.trim() ||
+      !plainText
+    ) {
+      setError(
+        "Completa el nombre interno, el título y el mensaje."
+      );
       return;
     }
 
@@ -31,27 +672,43 @@ export default function NewCommunicationPage() {
       setError("");
       setCopied(false);
 
-      const { data, error: insertError } = await supabase
-        .from("communications")
-        .insert({
-          internal_name: internalName.trim(),
-          title: title.trim(),
-          message: message.trim(),
-          button_text: buttonText.trim() || null,
-          button_url: buttonUrl.trim() || null,
-          status: "Borrador",
-          is_published: true,
-        })
-        .select("id")
-        .single();
+      const { data, error: insertError } =
+        await supabase
+          .from("communications")
+          .insert({
+            internal_name:
+              internalName.trim(),
+
+            title: title.trim(),
+
+            message: plainText,
+
+            content_html: currentHtml,
+
+            color_theme: selectedColor,
+
+            typography: selectedTypography,
+
+            status: "Borrador",
+
+            is_published: true,
+          })
+          .select("id")
+          .single();
 
       if (insertError) {
         throw insertError;
       }
 
+      setContentHtml(currentHtml);
+      setMessage(plainText);
       setCreatedId(data.id);
     } catch (err) {
-      console.error("Error creating communication:", err);
+      console.error(
+        "Error creating communication:",
+        err
+      );
+
       setError(
         err instanceof Error
           ? err.message
@@ -66,11 +723,20 @@ export default function NewCommunicationPage() {
     if (!publicUrl) return;
 
     try {
-      await navigator.clipboard.writeText(publicUrl);
+      await navigator.clipboard.writeText(
+        publicUrl
+      );
+
       setCopied(true);
-      window.setTimeout(() => setCopied(false), 2200);
+
+      window.setTimeout(
+        () => setCopied(false),
+        2200
+      );
     } catch {
-      setError("No fue posible copiar el enlace.");
+      setError(
+        "No fue posible copiar el enlace."
+      );
     }
   }
 
@@ -78,422 +744,1580 @@ export default function NewCommunicationPage() {
     <div
       style={{
         minHeight: "100vh",
-        background: "var(--color-background)",
+        display: "flex",
+        background:
+          "var(--color-background)",
       }}
     >
+      <Sidebar />
+
       <main
         style={{
-          maxWidth: "1100px",
-          margin: "0 auto",
+          flex: 1,
+          minWidth: 0,
           padding: "30px 46px 70px",
         }}
       >
-        <Link
-          href="/dashboard/communications"
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "8px",
-            marginBottom: "52px",
-            color: "#D2C2A3",
-            fontSize: "0.95rem",
-            fontWeight: 500,
-            textDecoration: "none",
-          }}
-        >
-          <span style={{ fontSize: "1.25rem", lineHeight: 1 }}>←</span>
-          <span>Comunicaciones</span>
-        </Link>
-
-        <section style={{ marginBottom: "34px" }}>
-          <p
-            style={{
-              margin: 0,
-              fontSize: "0.72rem",
-              letterSpacing: "0.18em",
-              textTransform: "uppercase",
-              color: "var(--color-accent)",
-            }}
-          >
-            COMUNICA
-          </p>
-
-          <h1
-            style={{
-              margin: "10px 0 0",
-              fontFamily: "var(--font-display)",
-              fontSize: "3.35rem",
-              fontWeight: 500,
-              lineHeight: 1.05,
-              color: "var(--color-text)",
-            }}
-          >
-            Nueva comunicación
-          </h1>
-
-          <p
-            style={{
-              maxWidth: "650px",
-              margin: "12px 0 0",
-              fontSize: "1rem",
-              lineHeight: 1.6,
-              color: "var(--color-text-secondary)",
-            }}
-          >
-            Crea el mensaje que compartirás por WhatsApp y genera el enlace
-            público para SendPulse.
-          </p>
-        </section>
-
         <div
           style={{
-            display: "grid",
-            gridTemplateColumns: "minmax(0, 1.25fr) minmax(320px, 0.75fr)",
-            gap: "22px",
-            alignItems: "start",
+            maxWidth: "1280px",
+            margin: "0 auto",
           }}
         >
-          <section
+          {/* BACK */}
+
+          <Link
+            href="/dashboard/communications"
             style={{
-              background: "var(--color-surface)",
-              border: "1px solid var(--color-border)",
-              borderRadius: "28px",
-              padding: "30px 34px",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "8px",
+              marginBottom: "42px",
+              color: "var(--color-accent)",
+              fontSize: "0.95rem",
+              fontWeight: 500,
+              textDecoration: "none",
             }}
           >
-            <div
+            <span
               style={{
-                marginBottom: "6px",
-                fontSize: "0.76rem",
-                letterSpacing: "0.08em",
-                textTransform: "uppercase",
-                color: "var(--color-text-secondary)",
+                fontSize: "1.25rem",
+                lineHeight: 1,
               }}
             >
-              Contenido
-            </div>
+              ←
+            </span>
 
-            <h2
-              style={{
-                margin: "4px 0 24px",
-                fontFamily: "var(--font-display)",
-                fontSize: "1.8rem",
-                fontWeight: 500,
-                color: "var(--color-text)",
-              }}
-            >
-              Escribe tu comunicación
-            </h2>
+            <span>
+              Volver a Comunicaciones
+            </span>
+          </Link>
 
-            <label htmlFor="internal-name" style={labelStyle}>
-              Nombre interno *
-            </label>
-
-            <input
-              id="internal-name"
-              value={internalName}
-              onChange={(e) => setInternalName(e.target.value)}
-              placeholder="Ej. Recordatorio de información"
-              style={inputStyle}
-            />
-
-            <label htmlFor="title" style={labelStyle}>
-              Título *
-            </label>
-
-            <input
-              id="title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Ej. Tenemos información importante para ti"
-              style={inputStyle}
-            />
-
-            <label htmlFor="message" style={labelStyle}>
-              Mensaje *
-            </label>
-
-            <textarea
-              id="message"
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              placeholder="Escribe aquí el mensaje que verá la persona..."
-              rows={11}
-              style={{
-                ...inputStyle,
-                resize: "vertical",
-                lineHeight: 1.65,
-                minHeight: "230px",
-              }}
-            />
-
-            <label htmlFor="button-text" style={labelStyle}>
-              Texto del botón
-              <span style={optionalStyle}>Opcional</span>
-            </label>
-
-            <input
-              id="button-text"
-              value={buttonText}
-              onChange={(e) => setButtonText(e.target.value)}
-              placeholder="Ej. Ver información"
-              style={inputStyle}
-            />
-
-            <label htmlFor="button-url" style={labelStyle}>
-              Enlace del botón
-              <span style={optionalStyle}>Opcional</span>
-            </label>
-
-            <input
-              id="button-url"
-              value={buttonUrl}
-              onChange={(e) => setButtonUrl(e.target.value)}
-              placeholder="https://..."
-              style={inputStyle}
-            />
-
-            {error && (
-              <div
-                style={{
-                  marginTop: "18px",
-                  padding: "14px 16px",
-                  borderRadius: "14px",
-                  background: "#FBF4F1",
-                  border: "1px solid #E8D8D1",
-                  color: "#765F56",
-                  fontSize: "0.88rem",
-                  lineHeight: 1.5,
-                }}
-              >
-                {error}
-              </div>
-            )}
-
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={saving || !!createdId}
-              style={{
-                width: "100%",
-                minHeight: "50px",
-                marginTop: "24px",
-                border: "none",
-                borderRadius: "999px",
-                background:
-                  saving || createdId
-                    ? "#D9D5CC"
-                    : "var(--color-primary)",
-                color: "#FFFFFF",
-                fontSize: "0.94rem",
-                fontWeight: 500,
-                cursor:
-                  saving || createdId ? "not-allowed" : "pointer",
-              }}
-            >
-              {saving
-                ? "Guardando..."
-                : createdId
-                  ? "Comunicación creada"
-                  : "Crear comunicación"}
-            </button>
-          </section>
+          {/* HEADER */}
 
           <section
             style={{
-              background: "#FBF9F4",
-              border: "1px solid var(--color-border)",
-              borderRadius: "28px",
-              padding: "30px",
-              position: "sticky",
-              top: "24px",
-            }}
-          >
-            <div
-              style={{
-                fontSize: "0.76rem",
-                letterSpacing: "0.08em",
-                textTransform: "uppercase",
-                color: "var(--color-text-secondary)",
-              }}
-            >
-              Vista previa
-            </div>
-
-            <h2
-              style={{
-                margin: "4px 0 22px",
-                fontFamily: "var(--font-display)",
-                fontSize: "1.8rem",
-                fontWeight: 500,
-                color: "var(--color-text)",
-              }}
-            >
-              Así lo verá la persona
-            </h2>
-
-            <div
-              style={{
-                background: "#FFFFFF",
-                border: "1px solid #EEE7DA",
-                borderRadius: "22px",
-                padding: "24px",
-              }}
-            >
-              <p
-                style={{
-                  margin: 0,
-                  fontFamily: "var(--font-display)",
-                  fontSize: "1.55rem",
-                  lineHeight: 1.15,
-                  color: "var(--color-text)",
-                }}
-              >
-                {title || "Título de tu comunicación"}
-              </p>
-
-              <div
-                style={{
-                  marginTop: "16px",
-                  fontSize: "0.94rem",
-                  lineHeight: 1.7,
-                  color: "var(--color-text-secondary)",
-                  whiteSpace: "pre-wrap",
-                }}
-              >
-                {message ||
-                  "Aquí aparecerá el contenido de tu mensaje."}
-              </div>
-
-              {buttonText.trim() && (
-                <div
-                  style={{
-                    display: "inline-flex",
-                    marginTop: "22px",
-                    padding: "11px 18px",
-                    borderRadius: "999px",
-                    background: "var(--color-primary)",
-                    color: "#FFFFFF",
-                    fontSize: "0.86rem",
-                    fontWeight: 500,
-                  }}
-                >
-                  {buttonText}
-                </div>
-              )}
-            </div>
-          </section>
-        </div>
-
-        {createdId && (
-          <section
-            style={{
-              marginTop: "22px",
-              background: "var(--color-surface)",
-              border: "1px solid var(--color-border)",
-              borderRadius: "28px",
-              padding: "28px 30px",
+              marginBottom: "34px",
             }}
           >
             <p
               style={{
                 margin: 0,
                 fontSize: "0.72rem",
-                letterSpacing: "0.12em",
-                textTransform: "uppercase",
+                letterSpacing: "0.18em",
+                textTransform:
+                  "uppercase",
                 color: "var(--color-accent)",
               }}
             >
-              Enlace listo
+              COMUNICA
             </p>
 
-            <h2
+            <h1
               style={{
-                margin: "7px 0 8px",
-                fontFamily: "var(--font-display)",
-                fontSize: "1.8rem",
+                margin: "10px 0 0",
+                fontFamily:
+                  "var(--font-display)",
+                fontSize: "3.35rem",
                 fontWeight: 500,
+                lineHeight: 1.05,
                 color: "var(--color-text)",
               }}
             >
-              Ya puedes usarlo en SendPulse
-            </h2>
+              Nueva comunicación
+            </h1>
 
             <p
               style={{
-                margin: "0 0 18px",
-                fontSize: "0.9rem",
+                maxWidth: "650px",
+                margin: "12px 0 0",
+                fontSize: "1rem",
                 lineHeight: 1.6,
-                color: "var(--color-text-secondary)",
+                color:
+                  "var(--color-text-secondary)",
               }}
             >
-              Este es el enlace que corresponde a{" "}
-              <strong style={{ fontWeight: 500 }}>
-                {"{{1}}"}
-              </strong>{" "}
-              en tu plantilla de WhatsApp.
+              Crea el mensaje que
+              compartirás por WhatsApp y
+              genera el enlace público para
+              SendPulse.
             </p>
+          </section>
 
-            <div
+          {/* MAIN GRID */}
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns:
+                "minmax(0, 1.25fr) minmax(360px, 0.75fr)",
+              gap: "22px",
+              alignItems: "start",
+            }}
+          >
+            {/* LEFT */}
+
+            <section
               style={{
-                display: "flex",
-                gap: "10px",
-                alignItems: "stretch",
+                background:
+                  "var(--color-surface)",
+                border:
+                  "1px solid var(--color-border)",
+                borderRadius: "28px",
+                padding: "30px 34px",
               }}
             >
-              <input
-                readOnly
-                value={publicUrl}
+              <div
                 style={{
-                  ...inputStyle,
-                  marginBottom: 0,
-                  flex: 1,
-                  background: "#FBF9F4",
+                  marginBottom: "6px",
+                  fontSize: "0.76rem",
+                  letterSpacing: "0.08em",
+                  textTransform:
+                    "uppercase",
+                  color:
+                    "var(--color-text-secondary)",
                 }}
+              >
+                Contenido
+              </div>
+
+              <h2
+                style={{
+                  margin:
+                    "4px 0 24px",
+                  fontFamily:
+                    "var(--font-display)",
+                  fontSize: "1.8rem",
+                  fontWeight: 500,
+                  color:
+                    "var(--color-text)",
+                }}
+              >
+                Escribe tu comunicación
+              </h2>
+
+              {/* INTERNAL NAME */}
+
+              <label
+                htmlFor="internal-name"
+                style={labelStyle}
+              >
+                Nombre interno *
+              </label>
+
+              <input
+                id="internal-name"
+                value={internalName}
+                onChange={(e) =>
+                  setInternalName(
+                    e.target.value
+                  )
+                }
+                placeholder="Ej. Recordatorio de información"
+                style={inputStyle}
               />
+
+              {/* TITLE */}
+
+              <label
+                htmlFor="title"
+                style={labelStyle}
+              >
+                Título *
+              </label>
+
+              <input
+                id="title"
+                value={title}
+                onChange={(e) =>
+                  setTitle(e.target.value)
+                }
+                placeholder="Ej. Tenemos información importante para ti"
+                style={inputStyle}
+              />
+
+              {/* CONFIRMA BRIDGE */}
+
+              <div
+                style={{
+                  marginTop: "24px",
+                  padding: "18px",
+                  borderRadius: "18px",
+                  background: "#FBF9F4",
+                  border: "1px solid var(--color-border)",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: "0.76rem",
+                    letterSpacing: "0.08em",
+                    textTransform: "uppercase",
+                    color: "var(--color-text-secondary)",
+                  }}
+                >
+                  Desde CONFIRMA
+                </div>
+
+                <p
+                  style={{
+                    margin: "7px 0 14px",
+                    fontSize: "0.9rem",
+                    lineHeight: 1.5,
+                    color: "var(--color-text-secondary)",
+                  }}
+                >
+                  Selecciona una boda para traer sus detalles importantes
+                  directamente al mensaje.
+                </p>
+
+                <div
+                  style={{
+                    display: "flex",
+                    gap: "10px",
+                    alignItems: "stretch",
+                  }}
+                >
+                  <select
+                    value={selectedCelebrationId}
+                    onChange={(e) =>
+                      setSelectedCelebrationId(e.target.value)
+                    }
+                    style={{
+                      ...inputStyle,
+                      marginBottom: 0,
+                      flex: 1,
+                      background: "#FFFFFF",
+                    }}
+                    disabled={loadingCelebrations || importingDetails}
+                  >
+                    <option value="">
+                      {loadingCelebrations
+                        ? "Cargando bodas..."
+                        : "Selecciona una boda de CONFIRMA"}
+                    </option>
+
+                    {celebrations.map((celebration) => (
+                      <option
+                        key={celebration.id}
+                        value={celebration.id}
+                      >
+                        {celebration.name}
+                      </option>
+                    ))}
+                  </select>
+
+                  <button
+                    type="button"
+                    onClick={importImportantDetails}
+                    disabled={
+                      !selectedCelebrationId ||
+                      loadingCelebrations ||
+                      importingDetails
+                    }
+                    style={{
+                      border: "none",
+                      borderRadius: "999px",
+                      padding: "0 18px",
+                      background:
+                        !selectedCelebrationId ||
+                        loadingCelebrations ||
+                        importingDetails
+                          ? "#D9D5CC"
+                          : "var(--color-primary)",
+                      color: "#FFFFFF",
+                      fontSize: "0.82rem",
+                      fontWeight: 500,
+                      cursor:
+                        !selectedCelebrationId ||
+                        loadingCelebrations ||
+                        importingDetails
+                          ? "not-allowed"
+                          : "pointer",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {importingDetails
+                      ? "Trayendo..."
+                      : "Traer detalles"}
+                  </button>
+                </div>
+              </div>
+
+              {/* COLOR */}
+
+              <div
+                style={{
+                  marginTop: "28px",
+                  marginBottom: "12px",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: "0.76rem",
+                    letterSpacing: "0.08em",
+                    textTransform:
+                      "uppercase",
+                    color:
+                      "var(--color-text-secondary)",
+                  }}
+                >
+                  Esencia / Color
+                </div>
+
+                <p
+                  style={{
+                    margin:
+                      "7px 0 16px",
+                    fontSize: "0.9rem",
+                    lineHeight: 1.5,
+                    color:
+                      "var(--color-text-secondary)",
+                  }}
+                >
+                  Elige el color que
+                  representará tu
+                  comunicación.
+                </p>
+
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns:
+                      "repeat(6, minmax(0, 1fr))",
+                    gap: "10px",
+                  }}
+                >
+                  {colorThemes.map(
+                    (theme) => {
+                      const selected =
+                        selectedColor ===
+                        theme.id;
+
+                      return (
+                        <button
+                          key={theme.id}
+                          type="button"
+                          onClick={() =>
+                            setSelectedColor(
+                              theme.id
+                            )
+                          }
+                          style={{
+                            border: selected
+                              ? `2px solid ${theme.color}`
+                              : "1px solid var(--color-border)",
+                            background:
+                              "#FFFFFF",
+                            borderRadius:
+                              "16px",
+                            padding:
+                              "10px 7px 11px",
+                            cursor:
+                              "pointer",
+                            boxShadow:
+                              selected
+                                ? `0 0 0 3px ${theme.soft}`
+                                : "none",
+                          }}
+                        >
+                          <div
+                            style={{
+                              width: "34px",
+                              height: "34px",
+                              margin:
+                                "0 auto 8px",
+                              borderRadius:
+                                "50%",
+                              background:
+                                theme.color,
+                            }}
+                          />
+
+                          <div
+                            style={{
+                              fontSize:
+                                "0.72rem",
+                              lineHeight:
+                                1.2,
+                              color:
+                                "var(--color-text)",
+                            }}
+                          >
+                            {theme.name}
+                          </div>
+                        </button>
+                      );
+                    }
+                  )}
+                </div>
+              </div>
+
+              {/* TYPOGRAPHY */}
+
+              <div
+                style={{
+                  marginTop: "28px",
+                  marginBottom: "12px",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: "0.76rem",
+                    letterSpacing: "0.08em",
+                    textTransform:
+                      "uppercase",
+                    color:
+                      "var(--color-text-secondary)",
+                  }}
+                >
+                  Tipografía
+                </div>
+
+                <p
+                  style={{
+                    margin:
+                      "7px 0 16px",
+                    fontSize: "0.9rem",
+                    lineHeight: 1.5,
+                    color:
+                      "var(--color-text-secondary)",
+                  }}
+                >
+                  Elige la tipografía que
+                  quieras combinar con tu
+                  color.
+                </p>
+
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns:
+                      "repeat(4, minmax(0, 1fr))",
+                    gap: "10px",
+                  }}
+                >
+                  {typographyOptions.map(
+                    (typography) => {
+                      const selected =
+                        selectedTypography ===
+                        typography.id;
+
+                      return (
+                        <button
+                          key={
+                            typography.id
+                          }
+                          type="button"
+                          onClick={() =>
+                            setSelectedTypography(
+                              typography.id
+                            )
+                          }
+                          style={{
+                            minHeight:
+                              "112px",
+                            border: selected
+                              ? `2px solid ${activeColor.color}`
+                              : "1px solid var(--color-border)",
+                            borderRadius:
+                              "16px",
+                            background:
+                              "#FFFFFF",
+                            padding:
+                              "14px",
+                            cursor:
+                              "pointer",
+                            textAlign:
+                              "left",
+                            boxShadow:
+                              selected
+                                ? `0 0 0 3px ${activeColor.soft}`
+                                : "none",
+                          }}
+                        >
+                          <div
+                            style={{
+                              fontSize:
+                                "0.72rem",
+                              fontWeight:
+                                600,
+                              color:
+                                "var(--color-text)",
+                            }}
+                          >
+                            {
+                              typography.name
+                            }
+                          </div>
+
+                          <div
+                            style={{
+                              marginTop:
+                                "3px",
+                              fontSize:
+                                "0.66rem",
+                              color:
+                                "var(--color-text-secondary)",
+                            }}
+                          >
+                            {
+                              typography.font
+                            }
+                          </div>
+
+                          <div
+                            style={{
+                              marginTop:
+                                "13px",
+                              fontFamily:
+                                typography.fontFamily,
+                              fontWeight: 400,
+                              fontSize:
+                                typography.id ===
+                                "romantica"
+                                  ? "2.35rem"
+                                  : "2rem",
+                              lineHeight: 1,
+                              color:
+                                activeColor.color,
+                            }}
+                          >
+                            {
+                              typography.sample
+                            }
+                          </div>
+                        </button>
+                      );
+                    }
+                  )}
+                </div>
+              </div>
+
+              {/* MESSAGE */}
+
+              <label
+                htmlFor="message-editor"
+                style={{
+                  ...labelStyle,
+                  marginTop: "30px",
+                }}
+              >
+                Mensaje *
+              </label>
+
+              {/* TOOLBAR */}
+
+              <div
+                style={{
+                  display: "flex",
+                  alignItems:
+                    "center",
+                  gap: "6px",
+                  flexWrap: "wrap",
+                  padding:
+                    "10px 12px",
+                  border:
+                    "1px solid var(--color-border)",
+                  borderBottom:
+                    "none",
+                  borderRadius:
+                    "14px 14px 0 0",
+                  background:
+                    "#FBF9F4",
+                }}
+              >
+                <button
+                  type="button"
+                  title="Negrita"
+                  onMouseDown={
+                    handleToolbarMouseDown
+                  }
+                  onClick={() =>
+                    executeCommand(
+                      "bold"
+                    )
+                  }
+                  style={{
+                    ...toolbarButtonStyle,
+                    fontWeight: 700,
+                  }}
+                >
+                  B
+                </button>
+
+                <button
+                  type="button"
+                  title="Cursiva"
+                  onMouseDown={
+                    handleToolbarMouseDown
+                  }
+                  onClick={() =>
+                    executeCommand(
+                      "italic"
+                    )
+                  }
+                  style={{
+                    ...toolbarButtonStyle,
+                    fontStyle: "italic",
+                  }}
+                >
+                  I
+                </button>
+
+                <button
+                  type="button"
+                  title="Subrayado"
+                  onMouseDown={
+                    handleToolbarMouseDown
+                  }
+                  onClick={() =>
+                    executeCommand(
+                      "underline"
+                    )
+                  }
+                  style={{
+                    ...toolbarButtonStyle,
+                    textDecoration:
+                      "underline",
+                  }}
+                >
+                  U
+                </button>
+
+                <div
+                  style={{
+                    width: "1px",
+                    height: "24px",
+                    margin:
+                      "0 3px",
+                    background:
+                      "var(--color-border)",
+                  }}
+                />
+
+                <button
+                  type="button"
+                  title="Alinear a la izquierda"
+                  onMouseDown={
+                    handleToolbarMouseDown
+                  }
+                  onClick={() =>
+                    executeCommand(
+                      "justifyLeft"
+                    )
+                  }
+                  style={{
+                    ...toolbarButtonStyle,
+                    fontSize: "1.15rem",
+                  }}
+                >
+                  ≡
+                </button>
+
+                <button
+                  type="button"
+                  title="Centrar"
+                  onMouseDown={
+                    handleToolbarMouseDown
+                  }
+                  onClick={() =>
+                    executeCommand(
+                      "justifyCenter"
+                    )
+                  }
+                  style={{
+                    ...toolbarButtonStyle,
+                    fontSize: "1.15rem",
+                    textAlign: "center",
+                  }}
+                >
+                  ≡
+                </button>
+
+                <button
+                  type="button"
+                  title="Alinear a la derecha"
+                  onMouseDown={
+                    handleToolbarMouseDown
+                  }
+                  onClick={() =>
+                    executeCommand(
+                      "justifyRight"
+                    )
+                  }
+                  style={{
+                    ...toolbarButtonStyle,
+                    fontSize: "1.15rem",
+                    textAlign: "right",
+                  }}
+                >
+                  ≡
+                </button>
+
+                <button
+                  type="button"
+                  title="Justificar"
+                  onMouseDown={
+                    handleToolbarMouseDown
+                  }
+                  onClick={() =>
+                    executeCommand(
+                      "justifyFull"
+                    )
+                  }
+                  style={{
+                    ...toolbarButtonStyle,
+                    fontSize: "1.15rem",
+                    letterSpacing: "-1px",
+                  }}
+                >
+                  ≡
+                </button>
+
+                <div
+                  style={{
+                    width: "1px",
+                    height: "24px",
+                    margin:
+                      "0 3px",
+                    background:
+                      "var(--color-border)",
+                  }}
+                />
+
+                <div
+                  style={{
+                    position:
+                      "relative",
+                  }}
+                >
+                  <button
+                    type="button"
+                    title="Insertar emoji"
+                    onMouseDown={
+                      handleToolbarMouseDown
+                    }
+                    onClick={() =>
+                      setShowEmojiPicker(
+                        (value) =>
+                          !value
+                      )
+                    }
+                    style={{
+                      ...toolbarButtonStyle,
+                      fontSize:
+                        "1.05rem",
+                    }}
+                  >
+                    😊
+                  </button>
+
+                  {showEmojiPicker && (
+                    <div
+                      style={{
+                        position:
+                          "absolute",
+                        top: "44px",
+                        left: 0,
+                        zIndex: 20,
+                        display:
+                          "grid",
+                        gridTemplateColumns:
+                          "repeat(4, 1fr)",
+                        gap: "4px",
+                        padding:
+                          "8px",
+                        width:
+                          "170px",
+                        background:
+                          "#FFFFFF",
+                        border:
+                          "1px solid var(--color-border)",
+                        borderRadius:
+                          "14px",
+                        boxShadow:
+                          "0 12px 30px rgba(56, 51, 44, 0.12)",
+                      }}
+                    >
+                      {emojis.map(
+                        (emoji) => (
+                          <button
+                            key={emoji}
+                            type="button"
+                            onMouseDown={
+                              handleToolbarMouseDown
+                            }
+                            onClick={() =>
+                              insertEmoji(
+                                emoji
+                              )
+                            }
+                            style={{
+                              border:
+                                "none",
+                              background:
+                                "transparent",
+                              borderRadius:
+                                "9px",
+                              padding:
+                                "7px",
+                              fontSize:
+                                "1.15rem",
+                              cursor:
+                                "pointer",
+                            }}
+                          >
+                            {emoji}
+                          </button>
+                        )
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  title="Insertar imagen"
+                  onMouseDown={
+                    handleToolbarMouseDown
+                  }
+                  onClick={
+                    openImagePicker
+                  }
+                  disabled={
+                    uploadingImage
+                  }
+                  style={{
+                    ...toolbarButtonStyle,
+                    fontSize:
+                      "1.02rem",
+                    opacity:
+                      uploadingImage
+                        ? 0.55
+                        : 1,
+                  }}
+                >
+                  🖼️
+                </button>
+
+                <input
+                  ref={imageInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={
+                    handleImageChange
+                  }
+                  style={{
+                    display: "none",
+                  }}
+                />
+
+                {uploadingImage && (
+                  <span
+                    style={{
+                      marginLeft:
+                        "5px",
+                      fontSize:
+                        "0.76rem",
+                      color:
+                        "var(--color-text-secondary)",
+                    }}
+                  >
+                    Subiendo imagen...
+                  </span>
+                )}
+              </div>
+
+              {/* EDITOR */}
+
+              <div
+                style={{
+                  position:
+                    "relative",
+                }}
+              >
+                <div
+                  id="message-editor"
+                  ref={editorRef}
+                  contentEditable={
+                    !createdId
+                  }
+                  suppressContentEditableWarning
+                  onInput={updateContent}
+                  onClick={
+                    handleEditorClick
+                  }
+                  onKeyUp={
+                    saveCurrentSelection
+                  }
+                  onMouseUp={
+                    saveCurrentSelection
+                  }
+                  onFocus={
+                    saveCurrentSelection
+                  }
+                  style={{
+                    width: "100%",
+                    minHeight:
+                      "270px",
+                    boxSizing:
+                      "border-box",
+                    padding:
+                      "16px 15px",
+                    border:
+                      "1px solid var(--color-border)",
+                    borderRadius:
+                      "0 0 14px 14px",
+                    outline: "none",
+                    background:
+                      "#FFFFFF",
+                    color:
+                      "var(--color-text)",
+                    fontFamily:
+                      activeTypography.fontFamily,
+                    fontSize: "1rem",
+                    lineHeight:
+                      1.7,
+                    whiteSpace:
+                      "pre-wrap",
+                    overflowWrap:
+                      "anywhere",
+                  }}
+                />
+
+                {!contentHtml && (
+                  <div
+                    style={{
+                      position:
+                        "absolute",
+                      top: "16px",
+                      left: "15px",
+                      pointerEvents:
+                        "none",
+                      color:
+                        "var(--color-text-muted)",
+                      fontFamily:
+                        activeTypography.fontFamily,
+                      fontSize:
+                        "1rem",
+                      lineHeight:
+                        1.7,
+                    }}
+                  >
+                    Escribe aquí el mensaje que verá la persona...
+                  </div>
+                )}
+              </div>
+
+              {/* IMAGE SIZE CONTROLS */}
+
+              {selectedImage && (
+                <div
+                  style={{
+                    display:
+                      "flex",
+                    alignItems:
+                      "center",
+                    gap: "8px",
+                    flexWrap:
+                      "wrap",
+                    marginTop:
+                      "12px",
+                    padding:
+                      "10px 12px",
+                    border:
+                      "1px solid var(--color-border)",
+                    borderRadius:
+                      "14px",
+                    background:
+                      "#FBF9F4",
+                  }}
+                >
+                  <span
+                    style={{
+                      marginRight:
+                        "4px",
+                      fontSize:
+                        "0.74rem",
+                      letterSpacing:
+                        "0.06em",
+                      textTransform:
+                        "uppercase",
+                      color:
+                        "var(--color-text-secondary)",
+                    }}
+                  >
+                    Tamaño de imagen
+                  </span>
+
+                  {imageSizes.map(
+                    (size) => {
+                      const selected =
+                        selectedImage.style.width ===
+                        size.width;
+
+                      return (
+                        <button
+                          key={size.id}
+                          type="button"
+                          onClick={() =>
+                            changeImageSize(
+                              size.width
+                            )
+                          }
+                          style={{
+                            border:
+                              selected
+                                ? `1px solid ${activeColor.color}`
+                                : "1px solid var(--color-border)",
+                            borderRadius:
+                              "999px",
+                            padding:
+                              "7px 12px",
+                            background:
+                              selected
+                                ? activeColor.soft
+                                : "#FFFFFF",
+                            color:
+                              selected
+                                ? activeColor.color
+                                : "var(--color-text)",
+                            fontSize:
+                              "0.76rem",
+                            fontWeight:
+                              selected
+                                ? 500
+                                : 400,
+                            cursor:
+                              "pointer",
+                          }}
+                        >
+                          {size.label}
+                        </button>
+                      );
+                    }
+                  )}
+                </div>
+              )}
+
+              <p
+                style={{
+                  margin:
+                    "9px 0 0",
+                  fontSize:
+                    "0.76rem",
+                  lineHeight:
+                    1.5,
+                  color:
+                    "var(--color-text-muted)",
+                }}
+              >
+                Puedes dar formato al
+                texto, insertar emojis y
+                agregar imágenes.
+                {selectedImage &&
+                  " Selecciona una imagen para cambiar su tamaño."}
+              </p>
+
+              {/* ERROR */}
+
+              {error && (
+                <div
+                  style={{
+                    marginTop:
+                      "18px",
+                    padding:
+                      "14px 16px",
+                    borderRadius:
+                      "14px",
+                    background:
+                      "#FBF4F1",
+                    border:
+                      "1px solid #E8D8D1",
+                    color:
+                      "#765F56",
+                    fontSize:
+                      "0.88rem",
+                    lineHeight:
+                      1.5,
+                  }}
+                >
+                  {error}
+                </div>
+              )}
+
+              {/* SAVE */}
 
               <button
                 type="button"
-                onClick={copyLink}
+                onClick={handleSave}
+                disabled={
+                  saving ||
+                  !!createdId
+                }
                 style={{
-                  minWidth: "135px",
+                  width: "100%",
+                  minHeight:
+                    "50px",
+                  marginTop:
+                    "24px",
                   border: "none",
-                  borderRadius: "999px",
-                  background: "var(--color-primary)",
-                  color: "#FFFFFF",
-                  fontSize: "0.88rem",
-                  fontWeight: 500,
-                  cursor: "pointer",
-                  padding: "0 18px",
+                  borderRadius:
+                    "999px",
+                  background:
+                    saving ||
+                    createdId
+                      ? "#D9D5CC"
+                      : "var(--color-primary)",
+                  color:
+                    "#FFFFFF",
+                  fontSize:
+                    "0.94rem",
+                  fontWeight:
+                    500,
+                  cursor:
+                    saving ||
+                    createdId
+                      ? "not-allowed"
+                      : "pointer",
                 }}
               >
-                {copied ? "¡Copiado!" : "Copiar enlace"}
+                {saving
+                  ? "Guardando..."
+                  : createdId
+                    ? "Comunicación creada"
+                    : "Guardar comunicación"}
               </button>
-            </div>
+            </section>
 
-            <a
-              href={publicUrl}
-              target="_blank"
-              rel="noreferrer"
+            {/* RIGHT / PREVIEW */}
+
+            <section
               style={{
-                display: "inline-flex",
-                marginTop: "16px",
-                color: "var(--color-accent)",
-                fontSize: "0.88rem",
-                fontWeight: 500,
-                textDecoration: "none",
+                background:
+                  "#FBF9F4",
+                border:
+                  "1px solid var(--color-border)",
+                borderRadius:
+                  "28px",
+                padding:
+                  "30px",
+                position:
+                  "sticky",
+                top: "24px",
               }}
             >
-              Abrir página pública →
-            </a>
-          </section>
-        )}
+              <div
+                style={{
+                  fontSize:
+                    "0.76rem",
+                  letterSpacing:
+                    "0.08em",
+                  textTransform:
+                    "uppercase",
+                  color:
+                    "var(--color-text-secondary)",
+                }}
+              >
+                Vista previa
+              </div>
+
+              <h2
+                style={{
+                  margin:
+                    "4px 0 22px",
+                  fontFamily:
+                    "var(--font-display)",
+                  fontSize:
+                    "1.8rem",
+                  fontWeight:
+                    500,
+                  color:
+                    "var(--color-text)",
+                }}
+              >
+                Así lo verá la persona
+              </h2>
+
+              {/* MESSAGE CARD */}
+
+              <div
+                style={{
+                  background:
+                    activeColor.soft,
+                  borderRadius:
+                    "24px",
+                  padding:
+                    "16px",
+                  transition:
+                    "background 0.2s ease",
+                }}
+              >
+                <div
+                  style={{
+                    position:
+                      "relative",
+                    overflow:
+                      "hidden",
+                    background:
+                      "#FFFFFF",
+                    border:
+                      `1px solid ${activeColor.color}30`,
+                    borderRadius:
+                      "22px",
+                    padding:
+                      "30px 26px",
+                    minHeight:
+                      "430px",
+                  }}
+                >
+                  <div
+                    style={{
+                      width:
+                        "54px",
+                      height:
+                        "1px",
+                      margin:
+                        "0 auto 26px",
+                      background:
+                        activeColor.color,
+                    }}
+                  />
+
+                  <div
+                    style={{
+                      textAlign:
+                        "center",
+                      fontSize:
+                        "0.68rem",
+                      letterSpacing:
+                        "0.18em",
+                      textTransform:
+                        "uppercase",
+                      color:
+                        activeColor.color,
+                    }}
+                  >
+                    COMUNICA
+                  </div>
+
+                  <h3
+                    style={{
+                      margin:
+                        "24px 0 0",
+                      fontFamily:
+                        activeTypography.fontFamily,
+                      fontWeight:
+                        500,
+                      fontSize:
+                        activeTypography.id ===
+                        "romantica"
+                          ? "2.4rem"
+                          : "2rem",
+                      lineHeight:
+                        1.12,
+                      textAlign:
+                        "center",
+                      color:
+                        activeColor.color,
+                    }}
+                  >
+                    {title ||
+                      "Título de tu comunicación"}
+                  </h3>
+
+                  <div
+                    style={{
+                      width:
+                        "42px",
+                      height:
+                        "1px",
+                      margin:
+                        "22px auto",
+                      background:
+                        activeColor.color,
+                      opacity: 0.55,
+                    }}
+                  />
+
+                  <div
+                    style={{
+                      fontFamily:
+                        activeTypography.fontFamily,
+                      fontSize:
+                        "1rem",
+                      lineHeight:
+                        1.7,
+                      color:
+                        "var(--color-text)",
+                      textAlign:
+                        "left",
+                      overflowWrap:
+                        "anywhere",
+                    }}
+                  >
+                    {contentHtml ? (
+                      <div
+                        dangerouslySetInnerHTML={{
+                          __html:
+                            contentHtml,
+                        }}
+                      />
+                    ) : (
+                      <span
+                        style={{
+                          color:
+                            "var(--color-text-muted)",
+                        }}
+                      >
+                        Aquí aparecerá el
+                        contenido de tu
+                        mensaje.
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* SELECTED STYLE */}
+
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent:
+                    "space-between",
+                  gap: "16px",
+                  marginTop:
+                    "18px",
+                  padding:
+                    "14px 16px",
+                  borderRadius:
+                    "16px",
+                  background:
+                    "#FFFFFF",
+                  border:
+                    "1px solid var(--color-border)",
+                }}
+              >
+                <div>
+                  <div
+                    style={{
+                      fontSize:
+                        "0.68rem",
+                      letterSpacing:
+                        "0.08em",
+                      textTransform:
+                        "uppercase",
+                      color:
+                        "var(--color-text-secondary)",
+                    }}
+                  >
+                    Color
+                  </div>
+
+                  <div
+                    style={{
+                      display:
+                        "flex",
+                      alignItems:
+                        "center",
+                      gap: "7px",
+                      marginTop:
+                        "5px",
+                      fontSize:
+                        "0.82rem",
+                      fontWeight:
+                        500,
+                    }}
+                  >
+                    <span
+                      style={{
+                        width:
+                          "10px",
+                        height:
+                          "10px",
+                        borderRadius:
+                          "50%",
+                        background:
+                          activeColor.color,
+                      }}
+                    />
+
+                    {activeColor.name}
+                  </div>
+                </div>
+
+                <div>
+                  <div
+                    style={{
+                      fontSize:
+                        "0.68rem",
+                      letterSpacing:
+                        "0.08em",
+                      textTransform:
+                        "uppercase",
+                      color:
+                        "var(--color-text-secondary)",
+                    }}
+                  >
+                    Tipografía
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop:
+                        "5px",
+                      fontSize:
+                        "0.82rem",
+                      fontWeight:
+                        500,
+                    }}
+                  >
+                    {
+                      activeTypography.name
+                    }
+                  </div>
+                </div>
+              </div>
+
+              {/* PUBLIC LINK */}
+
+              {createdId && (
+                <div
+                  style={{
+                    marginTop:
+                      "22px",
+                    paddingTop:
+                      "22px",
+                    borderTop:
+                      "1px solid var(--color-border)",
+                  }}
+                >
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize:
+                        "0.72rem",
+                      letterSpacing:
+                        "0.12em",
+                      textTransform:
+                        "uppercase",
+                      color:
+                        "var(--color-accent)",
+                    }}
+                  >
+                    Enlace público
+                  </p>
+
+                  <h3
+                    style={{
+                      margin:
+                        "7px 0 8px",
+                      fontFamily:
+                        "var(--font-display)",
+                      fontSize:
+                        "1.45rem",
+                      fontWeight:
+                        500,
+                      color:
+                        "var(--color-text)",
+                    }}
+                  >
+                    Listo para SendPulse
+                  </h3>
+
+                  <div
+                    style={{
+                      display:
+                        "flex",
+                      gap: "8px",
+                      alignItems:
+                        "stretch",
+                    }}
+                  >
+                    <input
+                      readOnly
+                      value={
+                        publicUrl
+                      }
+                      style={{
+                        ...inputStyle,
+                        marginBottom:
+                          0,
+                        flex: 1,
+                        background:
+                          "#FFFFFF",
+                        fontSize:
+                          "0.78rem",
+                      }}
+                    />
+
+                    <button
+                      type="button"
+                      onClick={
+                        copyLink
+                      }
+                      style={{
+                        minWidth:
+                          "105px",
+                        border:
+                          "none",
+                        borderRadius:
+                          "999px",
+                        background:
+                          activeColor.color,
+                        color:
+                          "#FFFFFF",
+                        fontSize:
+                          "0.8rem",
+                        fontWeight:
+                          500,
+                        cursor:
+                          "pointer",
+                        padding:
+                          "0 14px",
+                      }}
+                    >
+                      {copied
+                        ? "¡Copiado!"
+                        : "Copiar"}
+                    </button>
+                  </div>
+
+                  <a
+                    href={
+                      publicUrl
+                    }
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      display:
+                        "inline-flex",
+                      marginTop:
+                        "12px",
+                      color:
+                        activeColor.color,
+                      fontSize:
+                        "0.82rem",
+                      fontWeight:
+                        500,
+                      textDecoration:
+                        "none",
+                    }}
+                  >
+                    Abrir página pública →
+                  </a>
+                </div>
+              )}
+            </section>
+          </div>
+        </div>
       </main>
     </div>
   );
 }
 
-const labelStyle: React.CSSProperties = {
+const labelStyle: CSSProperties = {
   display: "block",
   marginBottom: "9px",
   marginTop: "20px",
@@ -503,7 +2327,7 @@ const labelStyle: React.CSSProperties = {
   color: "var(--color-text-secondary)",
 };
 
-const inputStyle: React.CSSProperties = {
+const inputStyle: CSSProperties = {
   width: "100%",
   minHeight: "48px",
   boxSizing: "border-box",
@@ -517,10 +2341,16 @@ const inputStyle: React.CSSProperties = {
   fontSize: "0.92rem",
 };
 
-const optionalStyle: React.CSSProperties = {
-  marginLeft: "7px",
-  fontSize: "0.68rem",
-  letterSpacing: "0.02em",
-  textTransform: "none",
-  color: "#A9A39A",
+const toolbarButtonStyle: CSSProperties = {
+  width: "34px",
+  height: "34px",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  border: "1px solid var(--color-border)",
+  borderRadius: "9px",
+  background: "#FFFFFF",
+  color: "var(--color-text)",
+  fontSize: "0.92rem",
+  cursor: "pointer",
 };
