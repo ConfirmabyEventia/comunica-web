@@ -50,6 +50,30 @@ function CommunicationIcon({ active }: { active: boolean }) {
   );
 }
 
+function TemplateIcon({ active }: { active: boolean }) {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={
+        active
+          ? "var(--color-accent)"
+          : "var(--color-text-secondary)"
+      }
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="4" y="4" width="16" height="16" rx="2" />
+      <path d="M8 8h8" />
+      <path d="M8 12h5" />
+      <path d="M8 16h8" />
+    </svg>
+  );
+}
+
 function TablesIcon({ active }: { active: boolean }) {
   return (
     <svg
@@ -129,6 +153,11 @@ const navigation = [
     label: "Comunicaciones",
     href: "/dashboard/communications",
     icon: CommunicationIcon,
+  },
+  {
+    label: "Plantillas",
+    href: "/dashboard/templates",
+    icon: TemplateIcon,
   },
   {
     label: "Mesas",
@@ -232,7 +261,8 @@ export default function Sidebar() {
                   : "var(--color-text)",
                 fontSize: "1rem",
                 fontWeight: isActive ? 500 : 400,
-                transition: "background 0.2s ease",
+                transition:
+                  "background 0.2s ease",
               }}
             >
               <Icon active={isActive} />

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   useRef,
   useState,
@@ -17,6 +18,18 @@ type Celebration = {
   name: string;
   event_date: string;
   important_details: ImportantDetail[] | null;
+};
+
+type CommunicationTemplate = {
+  id: string;
+  name: string;
+  description: string | null;
+  message: string;
+  content_html: string | null;
+  color_theme: string | null;
+  typography: string | null;
+  button_text: string | null;
+  button_url: string | null;
 };
 
 type ColorTheme = {
@@ -191,6 +204,11 @@ export default function NewCommunicationPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  const [templates, setTemplates] = useState<CommunicationTemplate[]>([]);
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
+  const [applyingTemplateId, setApplyingTemplateId] = useState<string | null>(null);
+
   const [celebrations, setCelebrations] = useState<Celebration[]>([]);
   const [selectedCelebrationId, setSelectedCelebrationId] = useState("");
   const [loadingCelebrations, setLoadingCelebrations] = useState(false);
@@ -198,8 +216,11 @@ export default function NewCommunicationPage() {
   const [createdId, setCreatedId] =
     useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+  const [templateSaved, setTemplateSaved] = useState(false);
 
   const editorRef = useRef<HTMLDivElement | null>(null);
+  const searchParams = useSearchParams();
 
   const imageInputRef =
     useRef<HTMLInputElement | null>(null);
@@ -470,6 +491,104 @@ export default function NewCommunicationPage() {
     updateContent();
   }
 
+  async function loadTemplates() {
+    try {
+      setLoadingTemplates(true);
+      setError("");
+
+      const { data, error: fetchError } = await supabase
+        .from("communication_templates")
+        .select(
+          `
+            id,
+            name,
+            description,
+            message,
+            content_html,
+            color_theme,
+            typography,
+            button_text,
+            button_url
+          `
+        )
+        .order("created_at", { ascending: false });
+
+      if (fetchError) throw fetchError;
+
+      setTemplates((data ?? []) as CommunicationTemplate[]);
+    } catch (err) {
+      console.error("Error cargando plantillas:", err);
+      setError(
+        err instanceof Error
+          ? err.message
+          : "No fue posible cargar las plantillas."
+      );
+    } finally {
+      setLoadingTemplates(false);
+    }
+  }
+
+  function applyTemplate(template: CommunicationTemplate) {
+    const editor = editorRef.current;
+
+    setApplyingTemplateId(template.id);
+    setError("");
+
+    setInternalName(template.name);
+    setTitle(template.name);
+    setSelectedColor(
+      colorThemes.some((theme) => theme.id === template.color_theme)
+        ? template.color_theme || "lavanda"
+        : "lavanda"
+    );
+    setSelectedTypography(
+      typographyOptions.some((font) => font.id === template.typography)
+        ? template.typography || "editorial"
+        : "editorial"
+    );
+
+    const html = template.content_html?.trim() || "";
+    setContentHtml(html);
+    setMessage(template.message || "");
+
+    if (editor) {
+      editor.innerHTML = html;
+      setMessage(
+        editor.innerText.replace(/\u00a0/g, " ").trim() ||
+          template.message ||
+          ""
+      );
+    }
+
+    setSelectedImage(null);
+    setShowTemplatePicker(false);
+    setApplyingTemplateId(null);
+  }
+
+  useEffect(() => {
+    loadTemplates();
+  }, []);
+
+  useEffect(() => {
+    const templateId = searchParams.get("template");
+    const editTemplate = searchParams.get("editTemplate") === "true";
+
+    if (!templateId || !templates.length) return;
+
+    const template = templates.find((item) => item.id === templateId);
+
+    if (template) {
+      if (editTemplate) {
+        setEditingTemplateId(template.id);
+        setTemplateSaved(false);
+      } else {
+        setEditingTemplateId(null);
+      }
+
+      applyTemplate(template);
+    }
+  }, [searchParams, templates]);
+
   useEffect(() => {
     async function loadCelebrations() {
       try {
@@ -671,6 +790,29 @@ export default function NewCommunicationPage() {
       setSaving(true);
       setError("");
       setCopied(false);
+      setTemplateSaved(false);
+
+      if (editingTemplateId) {
+        const { error: updateError } = await supabase
+          .from("communication_templates")
+          .update({
+            name: title.trim(),
+            message: plainText,
+            content_html: currentHtml,
+            color_theme: selectedColor,
+            typography: selectedTypography,
+          })
+          .eq("id", editingTemplateId);
+
+        if (updateError) {
+          throw updateError;
+        }
+
+        setContentHtml(currentHtml);
+        setMessage(plainText);
+        setTemplateSaved(true);
+        return;
+      }
 
       const { data, error: insertError } =
         await supabase
@@ -705,14 +847,18 @@ export default function NewCommunicationPage() {
       setCreatedId(data.id);
     } catch (err) {
       console.error(
-        "Error creating communication:",
+        editingTemplateId
+          ? "Error updating communication template:"
+          : "Error creating communication:",
         err
       );
 
       setError(
         err instanceof Error
           ? err.message
-          : "No fue posible crear la comunicación."
+          : editingTemplateId
+            ? "No fue posible actualizar la plantilla."
+            : "No fue posible crear la comunicación."
       );
     } finally {
       setSaving(false);
@@ -767,7 +913,7 @@ export default function NewCommunicationPage() {
           {/* BACK */}
 
           <Link
-            href="/dashboard/communications"
+            href={editingTemplateId ? "/dashboard/templates" : "/dashboard/communications"}
             style={{
               display: "inline-flex",
               alignItems: "center",
@@ -789,7 +935,9 @@ export default function NewCommunicationPage() {
             </span>
 
             <span>
-              Volver a Comunicaciones
+              {editingTemplateId
+                ? "Volver a Plantillas"
+                : "Volver a Comunicaciones"}
             </span>
           </Link>
 
@@ -824,7 +972,9 @@ export default function NewCommunicationPage() {
                 color: "var(--color-text)",
               }}
             >
-              Nueva comunicación
+              {editingTemplateId
+                ? "Editar plantilla"
+                : "Nueva comunicación"}
             </h1>
 
             <p
@@ -837,12 +987,256 @@ export default function NewCommunicationPage() {
                   "var(--color-text-secondary)",
               }}
             >
-              Crea el mensaje que
-              compartirás por WhatsApp y
-              genera el enlace público para
-              SendPulse.
+              {editingTemplateId
+                ? "Modifica el contenido de tu plantilla y guarda los cambios."
+                : "Crea el mensaje que compartirás por WhatsApp y genera el enlace público para SendPulse."}
             </p>
           </section>
+
+          {/* TEMPLATE PICKER */}
+
+          {!editingTemplateId && (
+          <section
+            style={{
+              marginBottom: "24px",
+              padding: "18px 20px",
+              borderRadius: "20px",
+              background: "#FBF9F4",
+              border: "1px solid var(--color-border)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "18px",
+              flexWrap: "wrap",
+            }}
+          >
+            <div>
+              <div
+                style={{
+                  fontSize: "0.74rem",
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                  color: "var(--color-text-secondary)",
+                }}
+              >
+                Plantillas
+              </div>
+              <p
+                style={{
+                  margin: "6px 0 0",
+                  fontSize: "0.9rem",
+                  color: "var(--color-text-secondary)",
+                }}
+              >
+                Empieza con una comunicación que ya guardaste.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowTemplatePicker(true)}
+              style={{
+                minHeight: "44px",
+                padding: "0 20px",
+                border: "1px solid var(--color-accent)",
+                borderRadius: "999px",
+                background: "#FFFFFF",
+                color: "var(--color-accent)",
+                fontSize: "0.84rem",
+                fontWeight: 500,
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+              }}
+            >
+              Elegir una plantilla →
+            </button>
+          </section>
+          )}
+
+          {showTemplatePicker && (
+            <div
+              style={{
+                position: "fixed",
+                inset: 0,
+                zIndex: 100,
+                background: "rgba(45, 39, 32, 0.28)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "24px",
+              }}
+              onMouseDown={(event) => {
+                if (event.target === event.currentTarget) {
+                  setShowTemplatePicker(false);
+                }
+              }}
+            >
+              <div
+                style={{
+                  width: "100%",
+                  maxWidth: "720px",
+                  maxHeight: "80vh",
+                  overflowY: "auto",
+                  background: "#FFFFFF",
+                  borderRadius: "28px",
+                  padding: "28px",
+                  boxSizing: "border-box",
+                  boxShadow: "0 24px 70px rgba(40, 34, 28, 0.18)",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "flex-start",
+                    justifyContent: "space-between",
+                    gap: "20px",
+                    marginBottom: "22px",
+                  }}
+                >
+                  <div>
+                    <p
+                      style={{
+                        margin: 0,
+                        fontSize: "0.7rem",
+                        letterSpacing: "0.16em",
+                        textTransform: "uppercase",
+                        color: "var(--color-accent)",
+                      }}
+                    >
+                      COMUNICA
+                    </p>
+                    <h2
+                      style={{
+                        margin: "7px 0 0",
+                        fontFamily: "var(--font-display)",
+                        fontSize: "2rem",
+                        fontWeight: 500,
+                        color: "var(--color-text)",
+                      }}
+                    >
+                      Elige una plantilla
+                    </h2>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowTemplatePicker(false)}
+                    style={{
+                      width: "36px",
+                      height: "36px",
+                      border: "1px solid var(--color-border)",
+                      borderRadius: "50%",
+                      background: "#FFFFFF",
+                      color: "var(--color-text-secondary)",
+                      fontSize: "1.1rem",
+                      cursor: "pointer",
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+
+                {loadingTemplates ? (
+                  <div
+                    style={{
+                      padding: "45px 20px",
+                      textAlign: "center",
+                      color: "var(--color-text-secondary)",
+                    }}
+                  >
+                    Cargando plantillas...
+                  </div>
+                ) : templates.length === 0 ? (
+                  <div
+                    style={{
+                      padding: "45px 20px",
+                      textAlign: "center",
+                      color: "var(--color-text-secondary)",
+                    }}
+                  >
+                    Aún no tienes plantillas guardadas.
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
+                      gap: "14px",
+                    }}
+                  >
+                    {templates.map((template) => {
+                      const color =
+                        colorThemes.find((item) => item.id === template.color_theme) ??
+                        colorThemes[1];
+
+                      return (
+                        <button
+                          key={template.id}
+                          type="button"
+                          onClick={() => applyTemplate(template)}
+                          disabled={applyingTemplateId === template.id}
+                          style={{
+                            textAlign: "left",
+                            padding: "18px",
+                            border: `1px solid ${color.color}55`,
+                            borderRadius: "20px",
+                            background: color.soft,
+                            cursor: "pointer",
+                            opacity: applyingTemplateId === template.id ? 0.6 : 1,
+                          }}
+                        >
+                          <div
+                            style={{
+                              fontFamily: "var(--font-display)",
+                              fontSize: "1.35rem",
+                              fontWeight: 500,
+                              color: color.color,
+                            }}
+                          >
+                            {template.name}
+                          </div>
+
+                          {template.description && (
+                            <div
+                              style={{
+                                marginTop: "6px",
+                                fontSize: "0.78rem",
+                                lineHeight: 1.45,
+                                color: "var(--color-text-secondary)",
+                              }}
+                            >
+                              {template.description}
+                            </div>
+                          )}
+
+                          <div
+                            style={{
+                              marginTop: "13px",
+                              fontSize: "0.72rem",
+                              color: "var(--color-text-secondary)",
+                            }}
+                          >
+                            {template.color_theme || "Sin color"} · {template.typography || "Sin tipografía"}
+                          </div>
+
+                          <div
+                            style={{
+                              marginTop: "12px",
+                              fontSize: "0.78rem",
+                              fontWeight: 500,
+                              color: color.color,
+                            }}
+                          >
+                            Usar esta plantilla →
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* MAIN GRID */}
 
@@ -1884,9 +2278,13 @@ export default function NewCommunicationPage() {
               >
                 {saving
                   ? "Guardando..."
-                  : createdId
-                    ? "Comunicación creada"
-                    : "Guardar comunicación"}
+                  : editingTemplateId
+                    ? templateSaved
+                      ? "Plantilla actualizada ✓"
+                      : "Guardar cambios"
+                    : createdId
+                      ? "Comunicación creada"
+                      : "Guardar comunicación"}
               </button>
             </section>
 

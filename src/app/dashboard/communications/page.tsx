@@ -10,9 +10,12 @@ type Communication = {
   internal_name: string;
   title: string;
   message: string;
+  content_html: string | null;
   status: "Borrador" | "Enviada";
   color_theme: string | null;
   typography: string | null;
+  button_text: string | null;
+  button_url: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -39,6 +42,8 @@ export default function CommunicationsPage() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [savingTemplateId, setSavingTemplateId] =
+    useState<string | null>(null);
 
   useEffect(() => {
     loadCommunications();
@@ -58,9 +63,12 @@ export default function CommunicationsPage() {
               internal_name,
               title,
               message,
+              content_html,
               status,
               color_theme,
               typography,
+              button_text,
+              button_url,
               created_at,
               updated_at
             `
@@ -89,6 +97,56 @@ export default function CommunicationsPage() {
       );
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function saveAsTemplate(
+    communication: Communication
+  ) {
+    try {
+      setSavingTemplateId(communication.id);
+      setError("");
+
+      const { error: insertError } =
+        await supabase
+          .from("communication_templates")
+          .insert({
+            name: communication.title,
+            description:
+              communication.internal_name || null,
+            message: communication.message || "",
+            content_html:
+              communication.content_html || null,
+            color_theme:
+              communication.color_theme || null,
+            typography:
+              communication.typography || null,
+            button_text:
+              communication.button_text || null,
+            button_url:
+              communication.button_url || null,
+          });
+
+      if (insertError) {
+        throw insertError;
+      }
+
+      alert(
+        `"${communication.title}" se guardó como plantilla.`
+      );
+    } catch (err) {
+      console.error(
+        "Error guardando plantilla:",
+        err
+      );
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "No fue posible guardar la plantilla."
+      );
+    } finally {
+      setSavingTemplateId(null);
     }
   }
 
@@ -122,8 +180,7 @@ export default function CommunicationsPage() {
             style={{
               display: "flex",
               alignItems: "flex-end",
-              justifyContent:
-                "space-between",
+              justifyContent: "space-between",
               gap: "24px",
               marginBottom: "42px",
             }}
@@ -134,8 +191,7 @@ export default function CommunicationsPage() {
                   margin: 0,
                   fontSize: "0.72rem",
                   letterSpacing: "0.2em",
-                  textTransform:
-                    "uppercase",
+                  textTransform: "uppercase",
                   color:
                     "var(--color-accent)",
                 }}
@@ -178,8 +234,7 @@ export default function CommunicationsPage() {
               style={{
                 display: "inline-flex",
                 alignItems: "center",
-                justifyContent:
-                  "center",
+                justifyContent: "center",
                 borderRadius: "999px",
                 padding: "14px 25px",
                 background:
@@ -226,8 +281,7 @@ export default function CommunicationsPage() {
                 borderRadius: "30px",
                 display: "flex",
                 alignItems: "center",
-                justifyContent:
-                  "center",
+                justifyContent: "center",
                 textAlign: "center",
               }}
             >
@@ -256,8 +310,7 @@ export default function CommunicationsPage() {
                 borderRadius: "30px",
                 display: "flex",
                 alignItems: "center",
-                justifyContent:
-                  "center",
+                justifyContent: "center",
                 textAlign: "center",
                 padding: "60px 30px",
               }}
@@ -270,15 +323,12 @@ export default function CommunicationsPage() {
                     margin:
                       "0 auto 28px",
                     borderRadius: "50%",
-                    background:
-                      "#F7F3EB",
+                    background: "#F7F3EB",
                     border:
                       "1px solid #EEE7DA",
                     display: "flex",
-                    alignItems:
-                      "center",
-                    justifyContent:
-                      "center",
+                    alignItems: "center",
+                    justifyContent: "center",
                   }}
                 >
                   <svg
@@ -385,16 +435,19 @@ export default function CommunicationsPage() {
                     communication.status ===
                     "Enviada";
 
+                  const isSavingTemplate =
+                    savingTemplateId ===
+                    communication.id;
+
                   return (
                     <div
                       key={
                         communication.id
                       }
                       style={{
-                        display:
-                          "grid",
+                        display: "grid",
                         gridTemplateColumns:
-                          "1.5fr 1fr 180px 120px 150px",
+                          "1.5fr 1fr 150px 110px 270px",
                         alignItems:
                           "center",
                         gap: "20px",
@@ -535,8 +588,7 @@ export default function CommunicationsPage() {
                                 : "var(--color-accent)",
                             fontSize:
                               "0.8rem",
-                            fontWeight:
-                              500,
+                            fontWeight: 500,
                           }}
                         >
                           {
@@ -545,25 +597,78 @@ export default function CommunicationsPage() {
                         </span>
                       </div>
 
-                      {/* ACTION */}
+                      {/* ACTIONS */}
 
-                      <Link
-                        href={`/dashboard/communications/${communication.id}`}
+                      <div
                         style={{
-                          color:
-                            "var(--color-accent)",
-                          textDecoration:
-                            "none",
-                          fontSize:
-                            "0.9rem",
-                          fontWeight:
-                            500,
-                          whiteSpace:
-                            "nowrap",
+                          display: "flex",
+                          alignItems:
+                            "center",
+                          justifyContent:
+                            "flex-end",
+                          gap: "18px",
+                          flexWrap:
+                            "wrap",
                         }}
                       >
-                        Ver comunicación →
-                      </Link>
+                        <Link
+                          href={`/dashboard/communications/${communication.id}`}
+                          style={{
+                            color:
+                              "var(--color-accent)",
+                            textDecoration:
+                              "none",
+                            fontSize:
+                              "0.9rem",
+                            fontWeight: 500,
+                            whiteSpace:
+                              "nowrap",
+                          }}
+                        >
+                          Ver comunicación →
+                        </Link>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            saveAsTemplate(
+                              communication
+                            )
+                          }
+                          disabled={
+                            isSavingTemplate
+                          }
+                          style={{
+                            border:
+                              "1px solid var(--color-border)",
+                            borderRadius:
+                              "999px",
+                            padding:
+                              "9px 14px",
+                            background:
+                              "#FFFFFF",
+                            color:
+                              "var(--color-accent)",
+                            fontSize:
+                              "0.82rem",
+                            fontWeight: 500,
+                            cursor:
+                              isSavingTemplate
+                                ? "default"
+                                : "pointer",
+                            opacity:
+                              isSavingTemplate
+                                ? 0.6
+                                : 1,
+                            whiteSpace:
+                              "nowrap",
+                          }}
+                        >
+                          {isSavingTemplate
+                            ? "Guardando..."
+                            : "Guardar como plantilla"}
+                        </button>
+                      </div>
                     </div>
                   );
                 }
@@ -576,9 +681,7 @@ export default function CommunicationsPage() {
   );
 }
 
-function formatDate(
-  date: string
-) {
+function formatDate(date: string) {
   return new Intl.DateTimeFormat(
     "es-CO",
     {
