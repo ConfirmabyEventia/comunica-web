@@ -134,13 +134,13 @@ const typographyOptions: Typography[] = [
     fontFamily: "'Montserrat', sans-serif",
     sample: "Aa",
   },
-  {
-    id: "romantica",
-    name: "Romántica",
-    font: "Allura",
-    fontFamily: "'Allura', cursive",
-    sample: "Aa",
-  },
+ {
+  id: "romantica",
+  name: "Suave",
+  font: "Trebuchet MS",
+  fontFamily: "'Trebuchet MS', Arial, sans-serif",
+  sample: "Aa",
+},
 ];
 
 const emojis = [
@@ -182,6 +182,17 @@ const imageSizes = [
 ];
 
 function NewCommunicationPageContent() {
+  const titleFontSizes: Record<string, string> = {
+  small: "1.65rem",
+  normal: "2rem",
+  large: "2.4rem",
+};
+
+const messageFontSizes: Record<string, string> = {
+  small: "0.9rem",
+  normal: "1rem",
+  large: "1.15rem",
+};
   const [internalName, setInternalName] = useState("");
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
@@ -191,7 +202,10 @@ function NewCommunicationPageContent() {
     useState("lavanda");
 
   const [selectedTypography, setSelectedTypography] =
-    useState("editorial");
+  useState("editorial");
+
+const [titleSize, setTitleSize] = useState("normal");
+const [messageSize, setMessageSize] = useState("normal");
 
   const [showEmojiPicker, setShowEmojiPicker] =
     useState(false);
@@ -238,7 +252,20 @@ function NewCommunicationPageContent() {
     typographyOptions.find(
       (font) => font.id === selectedTypography
     ) ?? typographyOptions[0];
-
+const textSizes = [
+  {
+    id: "small",
+    label: "Pequeño",
+  },
+  {
+    id: "normal",
+    label: "Normal",
+  },
+  {
+    id: "large",
+    label: "Grande",
+  },
+] as const;
   const publicUrl = createdId
     ? `https://comunica.evensse.com/message/${createdId}`
     : "";
@@ -1330,7 +1357,60 @@ function NewCommunicationPageContent() {
                 placeholder="Ej. Tenemos información importante para ti"
                 style={inputStyle}
               />
+<div
+  style={{
+    marginTop: "14px",
+  }}
+>
+  <div
+    style={{
+      fontSize: "0.76rem",
+      letterSpacing: "0.08em",
+      textTransform: "uppercase",
+      color: "var(--color-text-secondary)",
+      marginBottom: "8px",
+    }}
+  >
+    Tamaño del título
+  </div>
 
+  <div
+    style={{
+      display: "flex",
+      gap: "8px",
+    }}
+  >
+    {textSizes.map((size) => {
+      const selected = titleSize === size.id;
+
+      return (
+        <button
+          key={size.id}
+          type="button"
+          onClick={() => setTitleSize(size.id)}
+          style={{
+            border: selected
+              ? "1px solid var(--color-accent)"
+              : "1px solid var(--color-border)",
+            borderRadius: "999px",
+            padding: "7px 13px",
+            background: selected
+              ? "var(--color-accent-soft, #F2ECE7)"
+              : "#FFFFFF",
+            color: selected
+              ? "var(--color-accent)"
+              : "var(--color-text)",
+            fontSize: "0.76rem",
+            fontWeight: selected ? 500 : 400,
+            cursor: "pointer",
+          }}
+        >
+          {size.label}
+        </button>
+      );
+    })}
+  </div>
+</div>
               {/* CONFIRMA BRIDGE */}
 
               <div
@@ -1699,7 +1779,61 @@ function NewCommunicationPageContent() {
               >
                 Mensaje *
               </label>
+<div
+  style={{
+    marginTop: "22px",
+    marginBottom: "10px",
+  }}
+>
+  <div
+    style={{
+      fontSize: "0.76rem",
+      letterSpacing: "0.08em",
+      textTransform: "uppercase",
+      color: "var(--color-text-secondary)",
+      marginBottom: "8px",
+    }}
+  >
+    Tamaño del mensaje
+  </div>
 
+  <div
+    style={{
+      display: "flex",
+      gap: "8px",
+    }}
+  >
+    {textSizes.map((size) => {
+      const selected = messageSize === size.id;
+
+      return (
+        <button
+          key={size.id}
+          type="button"
+          onClick={() => setMessageSize(size.id)}
+          style={{
+            border: selected
+              ? "1px solid var(--color-accent)"
+              : "1px solid var(--color-border)",
+            borderRadius: "999px",
+            padding: "7px 13px",
+            background: selected
+              ? "var(--color-accent-soft, #F2ECE7)"
+              : "#FFFFFF",
+            color: selected
+              ? "var(--color-accent)"
+              : "var(--color-text)",
+            fontSize: "0.76rem",
+            fontWeight: selected ? 500 : 400,
+            cursor: "pointer",
+          }}
+        >
+          {size.label}
+        </button>
+      );
+    })}
+  </div>
+</div>
               {/* TOOLBAR */}
 
               <div
@@ -2401,29 +2535,26 @@ function NewCommunicationPageContent() {
                   </div>
 
                   <h3
-                    style={{
-                      margin:
-                        "24px 0 0",
-                      fontFamily:
-                        activeTypography.fontFamily,
-                      fontWeight:
-                        500,
-                      fontSize:
-                        activeTypography.id ===
-                        "romantica"
-                          ? "2.4rem"
-                          : "2rem",
-                      lineHeight:
-                        1.12,
-                      textAlign:
-                        "center",
-                      color:
-                        activeColor.color,
-                    }}
-                  >
-                    {title ||
-                      "Título de tu comunicación"}
-                  </h3>
+  style={{
+    margin:
+      "24px 0 0",
+    fontFamily:
+      activeTypography.fontFamily,
+    fontWeight:
+      500,
+    fontSize:
+      titleFontSizes[titleSize],
+    lineHeight:
+      1.12,
+    textAlign:
+      "center",
+    color:
+      activeColor.color,
+  }}
+>
+  {title ||
+    "Título de tu comunicación"}
+</h3>
 
                   <div
                     style={{

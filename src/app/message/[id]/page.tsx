@@ -80,12 +80,12 @@ const typographyOptions: Typography[] = [
     font: "Montserrat",
     fontFamily: "'Montserrat', sans-serif",
   },
-  {
-    id: "romantica",
-    name: "Romántica",
-    font: "Allura",
-    fontFamily: "'Allura', cursive",
-  },
+{
+  id: "romantica",
+  name: "Suave",
+  font: "Trebuchet MS",
+  fontFamily: "'Trebuchet MS', Arial, sans-serif",
+},
 ];
 
 export default async function PublicMessagePage({

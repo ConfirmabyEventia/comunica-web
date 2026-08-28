@@ -93,10 +93,10 @@ const typographyOptions: Record<
     fontFamily: "'Montserrat', sans-serif",
   },
 
-  romantica: {
-    name: "Romántica",
-    fontFamily: "'Allura', cursive",
-  },
+ romantica: {
+  name: "Suave",
+  fontFamily: "'Trebuchet MS', Arial, sans-serif",
+},
 };
 
 export default async function TemplatePreviewPage({

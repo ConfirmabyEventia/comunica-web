@@ -33,9 +33,8 @@ const typographyNames: Record<string, string> = {
   editorial: "Editorial",
   clasica: "Clásica",
   contemporanea: "Contemporánea",
-  romantica: "Romántica",
+  romantica: "Suave",
 };
-
 export default function TemplatesPage() {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);

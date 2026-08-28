@@ -85,13 +85,13 @@ const MESSAGE_FONTS = [
     value: "Georgia, 'Times New Roman', serif",
   },
   {
-    name: "Contemporánea",
-    value: "Arial, Helvetica, sans-serif",
-  },
-  {
-    name: "Romántica",
-    value: "'Trebuchet MS', Arial, sans-serif",
-  },
+  name: "Contemporánea",
+  value: "Montserrat, Arial, Helvetica, sans-serif",
+},
+ {
+  name: "Suave",
+  value: "'Trebuchet MS', Arial, sans-serif",
+},
 ] as const;
 
 const DEFAULT_MESSAGE_HTML = `
