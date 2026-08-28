@@ -80,12 +80,12 @@ const typographyOptions: Typography[] = [
     font: "Montserrat",
     fontFamily: "'Montserrat', sans-serif",
   },
-{
-  id: "romantica",
-  name: "Suave",
-  font: "Trebuchet MS",
-  fontFamily: "'Trebuchet MS', Arial, sans-serif",
-},
+  {
+    id: "romantica",
+    name: "Suave",
+    font: "Trebuchet MS",
+    fontFamily: "'Trebuchet MS', Arial, sans-serif",
+  },
 ];
 
 export default async function PublicMessagePage({
@@ -93,7 +93,121 @@ export default async function PublicMessagePage({
 }: Props) {
   const { id } = await params;
 
-  const { data, error } = await supabase
+  const publicCode = id.trim().toUpperCase();
+
+  /*
+   * 1. Buscar el código del titular.
+   *
+   * El código E95UJG pertenece a table_group_codes
+   * y apunta al principal_person_id.
+   */
+  const { data: groupCode, error: groupCodeError } =
+    await supabase
+      .from("table_group_codes")
+      .select(
+        `
+          principal_person_id,
+          code
+        `
+      )
+      .eq("code", publicCode)
+      .single();
+
+  if (groupCodeError || !groupCode) {
+    notFound();
+  }
+
+  /*
+   * 2. Buscar al titular.
+   */
+  const { data: principal, error: principalError } =
+    await supabase
+      .from("people")
+      .select(
+        `
+          id,
+          event_id,
+          name,
+          titular_name
+        `
+      )
+      .eq("id", groupCode.principal_person_id)
+      .single();
+
+  if (principalError || !principal) {
+    notFound();
+  }
+
+  /*
+   * 3. Buscar todos los integrantes del grupo familiar.
+   *
+   * El titular tiene titular_name igual a su propio nombre.
+   * Los acompañantes tienen ese mismo titular_name.
+   */
+  const { data: familyPeople, error: familyError } =
+    await supabase
+      .from("people")
+      .select(
+        `
+          id,
+          name,
+          titular_name
+        `
+      )
+      .eq("event_id", principal.event_id)
+      .eq("titular_name", principal.name)
+      .order("name");
+
+  if (familyError) {
+    notFound();
+  }
+
+  const people = familyPeople ?? [];
+
+  /*
+   * 4. Buscar las mesas de todos los integrantes.
+   */
+  const personIds = people.map(
+    (person) => person.id
+  );
+
+  let assignments: {
+    person_id: string;
+    table_number: string | null;
+    table_name: string | null;
+  }[] = [];
+
+  if (personIds.length > 0) {
+    const {
+      data: assignmentData,
+      error: assignmentError,
+    } = await supabase
+      .from("table_assignments")
+      .select(
+        `
+          person_id,
+          table_number,
+          table_name
+        `
+      )
+      .eq("event_id", principal.event_id)
+      .in("person_id", personIds);
+
+    if (assignmentError) {
+      notFound();
+    }
+
+    assignments = assignmentData ?? [];
+  }
+
+  /*
+   * 5. Buscar la comunicación específica
+   *    "Asignación de mesas".
+   */
+  const {
+    data: communication,
+    error: communicationError,
+  } = await supabase
     .from("communications")
     .select(
       `
@@ -108,35 +222,132 @@ export default async function PublicMessagePage({
         is_published
       `
     )
-    .eq("id", id)
+    .eq(
+      "internal_name",
+      "Asignación de mesas"
+    )
     .eq("is_published", true)
     .single();
 
-  if (error || !data) {
+  if (
+    communicationError ||
+    !communication
+  ) {
     notFound();
   }
 
   const activeColor =
     colorThemes.find(
-      (theme) => theme.id === data.color_theme
-    ) ?? colorThemes[1];
+      (theme) =>
+        theme.id ===
+        communication.color_theme
+    ) ?? colorThemes[0];
 
   const activeTypography =
     typographyOptions.find(
-      (font) => font.id === data.typography
+      (font) =>
+        font.id ===
+        communication.typography
     ) ?? typographyOptions[0];
 
   /*
-   * Comunicaciones nuevas:
-   * usamos content_html para conservar formato,
-   * imágenes, alineación, negrita, cursiva, etc.
-   *
-   * Comunicaciones antiguas:
-   * si content_html es null, usamos message como respaldo.
+   * 6. Crear la información de mesas
+   *    que reemplazará {{asignacion_mesas}}.
    */
+  const assignmentByPerson =
+    new Map(
+      assignments.map((assignment) => [
+        assignment.person_id,
+        assignment,
+      ])
+    );
+
+  const assignmentHtml = people
+    .map((person) => {
+      const assignment =
+        assignmentByPerson.get(
+          person.id
+        );
+
+      const tableNumber =
+        assignment?.table_number?.trim() ||
+        "";
+
+      const tableName =
+        assignment?.table_name?.trim() ||
+        "";
+
+      let tableText =
+        "Mesa por confirmar";
+
+      if (tableNumber && tableName) {
+        tableText = `Mesa ${tableNumber} · ${tableName}`;
+      } else if (tableNumber) {
+        tableText = `Mesa ${tableNumber}`;
+      } else if (tableName) {
+        tableText = tableName;
+      }
+
+      return `
+        <div style="
+          margin: 0 0 14px;
+          padding: 14px 16px;
+          border-radius: 14px;
+          background: ${activeColor.soft};
+        ">
+          <div style="
+            font-weight: 600;
+            color: ${activeColor.color};
+          ">
+            ${escapeHtml(person.name)}
+          </div>
+
+          <div style="
+            margin-top: 4px;
+            font-size: 0.92rem;
+            color: #5F5A55;
+          ">
+            ${escapeHtml(tableText)}
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+
+  /*
+   * 7. Reemplazar las variables del mensaje.
+   */
+  const replaceVariables = (
+    html: string
+  ) => {
+    return html
+      .replace(
+        /\{\{nombre_titular\}\}/g,
+        escapeHtml(principal.name)
+      )
+      .replace(
+        /\{\{asignacion_mesas\}\}/g,
+        assignmentHtml
+      );
+  };
+
   const hasHtml =
-    typeof data.content_html === "string" &&
-    data.content_html.trim().length > 0;
+    typeof communication.content_html ===
+      "string" &&
+    communication.content_html
+      .trim()
+      .length > 0;
+
+  const renderedHtml = hasHtml
+    ? replaceVariables(
+        communication.content_html
+      )
+    : "";
+
+  const renderedMessage =
+    replaceVariables(
+      communication.message ?? ""
+    );
 
   return (
     <main
@@ -189,7 +400,8 @@ export default async function PublicMessagePage({
             width: "54px",
             height: "1px",
             margin: "24px auto 0",
-            background: activeColor.color,
+            background:
+              activeColor.color,
           }}
         />
 
@@ -197,13 +409,16 @@ export default async function PublicMessagePage({
         <h1
           style={{
             margin: "24px 0 0",
-            fontFamily: activeTypography.fontFamily,
+            fontFamily:
+              activeTypography.fontFamily,
             fontSize:
-              activeTypography.id === "romantica"
+              activeTypography.id ===
+              "romantica"
                 ? "clamp(2.8rem, 8vw, 4rem)"
                 : "clamp(2.15rem, 6vw, 3.4rem)",
             fontWeight:
-              activeTypography.id === "romantica"
+              activeTypography.id ===
+              "romantica"
                 ? 400
                 : 500,
             lineHeight: 1.08,
@@ -211,16 +426,18 @@ export default async function PublicMessagePage({
             textAlign: "center",
           }}
         >
-          {data.title}
+          {communication.title}
         </h1>
 
         {/* MESSAGE */}
         <div
           style={{
             marginTop: "30px",
-            fontFamily: activeTypography.fontFamily,
+            fontFamily:
+              activeTypography.fontFamily,
             fontSize:
-              activeTypography.id === "romantica"
+              activeTypography.id ===
+              "romantica"
                 ? "1.35rem"
                 : "1rem",
             lineHeight: 1.75,
@@ -228,12 +445,10 @@ export default async function PublicMessagePage({
             overflowWrap: "anywhere",
           }}
         >
-
- 
           {hasHtml ? (
             <div
               dangerouslySetInnerHTML={{
-                __html: data.content_html,
+                __html: renderedHtml,
               }}
             />
           ) : (
@@ -242,46 +457,54 @@ export default async function PublicMessagePage({
                 whiteSpace: "pre-wrap",
               }}
             >
-              {data.message}
+              {renderedMessage}
             </div>
           )}
         </div>
 
         {/* BUTTON */}
-        {data.button_text && data.button_url && (
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "center",
-            }}
-          >
-            <a
-              href={data.button_url}
-              target="_blank"
-              rel="noreferrer"
+        {communication.button_text &&
+          communication.button_url && (
+            <div
               style={{
-                display: "inline-flex",
-                alignItems: "center",
+                display: "flex",
                 justifyContent: "center",
-                marginTop: "30px",
-                minHeight: "48px",
-                padding: "0 24px",
-                borderRadius: "999px",
-                background: activeColor.color,
-                color: "#FFFFFF",
-                fontFamily:
-                  "'Montserrat', sans-serif",
-                fontSize: "0.9rem",
-                fontWeight: 500,
-                textDecoration: "none",
-                boxShadow:
-                  "0 8px 20px rgba(60, 50, 35, 0.10)",
               }}
             >
-              {data.button_text}
-            </a>
-          </div>
-        )}
+              <a
+                href={
+                  communication.button_url
+                }
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  display:
+                    "inline-flex",
+                  alignItems: "center",
+                  justifyContent:
+                    "center",
+                  marginTop: "30px",
+                  minHeight: "48px",
+                  padding: "0 24px",
+                  borderRadius: "999px",
+                  background:
+                    activeColor.color,
+                  color: "#FFFFFF",
+                  fontFamily:
+                    "'Montserrat', sans-serif",
+                  fontSize: "0.9rem",
+                  fontWeight: 500,
+                  textDecoration: "none",
+                  boxShadow:
+                    "0 8px 20px rgba(60, 50, 35, 0.10)",
+                }}
+              >
+                {
+                  communication.button_text
+                }
+              </a>
+            </div>
+          )}
 
         {/* FOOTER */}
         <div
@@ -298,7 +521,8 @@ export default async function PublicMessagePage({
                 "'Montserrat', sans-serif",
               fontSize: "0.68rem",
               letterSpacing: "0.14em",
-              textTransform: "uppercase",
+              textTransform:
+                "uppercase",
               color: "#99918A",
             }}
           >
@@ -307,10 +531,6 @@ export default async function PublicMessagePage({
         </div>
       </article>
 
-      {/* 
-        Small global adjustments for HTML generated
-        by the communication editor.
-      */}
       <style>
         {`
           img {
@@ -334,4 +554,20 @@ export default async function PublicMessagePage({
       </style>
     </main>
   );
+}
+
+/*
+ * Evita que nombres provenientes de Supabase
+ * se interpreten como HTML al insertarlos
+ * en el contenido personalizado.
+ */
+function escapeHtml(
+  value: string
+): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
