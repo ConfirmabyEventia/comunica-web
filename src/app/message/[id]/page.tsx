@@ -88,6 +88,18 @@ const typographyOptions: Typography[] = [
   },
 ];
 
+type Person = {
+  id: string;
+  name: string;
+  titular_name: string | null;
+};
+
+type Assignment = {
+  person_id: string;
+  table_number: string | null;
+  table_name: string | null;
+};
+
 export default async function PublicMessagePage({
   params,
 }: Props) {
@@ -96,86 +108,129 @@ export default async function PublicMessagePage({
   const publicCode = id.trim().toUpperCase();
 
   /*
-   * 1. Buscar el código del titular.
-   *
-   * El código E95UJG pertenece a table_group_codes
-   * y apunta al principal_person_id.
+   * =========================================================
+   * 1. BUSCAR EL CÓDIGO DEL TITULAR
+   * =========================================================
    */
-  const { data: groupCode, error: groupCodeError } =
-    await supabase
-      .from("table_group_codes")
-      .select(
-        `
-          principal_person_id,
-          code
-        `
-      )
-      .eq("code", publicCode)
-      .single();
+
+  const {
+    data: groupCode,
+    error: groupCodeError,
+  } = await supabase
+    .from("table_group_codes")
+    .select(
+      `
+        principal_person_id,
+        code
+      `
+    )
+    .eq("code", publicCode)
+    .single();
 
   if (groupCodeError || !groupCode) {
     notFound();
   }
 
   /*
-   * 2. Buscar al titular.
+   * =========================================================
+   * 2. BUSCAR AL TITULAR
+   * =========================================================
    */
-  const { data: principal, error: principalError } =
-    await supabase
-      .from("people")
-      .select(
-        `
-          id,
-          event_id,
-          name,
-          titular_name
-        `
-      )
-      .eq("id", groupCode.principal_person_id)
-      .single();
+
+  const {
+    data: principal,
+    error: principalError,
+  } = await supabase
+    .from("people")
+    .select(
+      `
+        id,
+        event_id,
+        name,
+        titular_name
+      `
+    )
+    .eq(
+      "id",
+      groupCode.principal_person_id
+    )
+    .single();
 
   if (principalError || !principal) {
     notFound();
   }
 
   /*
-   * 3. Buscar todos los integrantes del grupo familiar.
+   * =========================================================
+   * 3. BUSCAR EL EVENTO
    *
-   * El titular tiene titular_name igual a su propio nombre.
-   * Los acompañantes tienen ese mismo titular_name.
+   * El nombre del evento será utilizado para:
+   *
+   * {{nombre_de_los_novios}}
+   *
+   * y también:
+   *
+   * {{nombre_evento}}
+   * =========================================================
    */
-  const { data: familyPeople, error: familyError } =
-    await supabase
-      .from("people")
-      .select(
-        `
-          id,
-          name,
-          titular_name
-        `
-      )
-      .eq("event_id", principal.event_id)
-      .eq("titular_name", principal.name)
-      .order("name");
+
+  const {
+    data: event,
+    error: eventError,
+  } = await supabase
+    .from("events")
+    .select("name")
+    .eq("id", principal.event_id)
+    .single();
+
+  if (eventError || !event) {
+    notFound();
+  }
+
+  const eventName =
+    String(event.name ?? "").trim();
+
+  /*
+   * =========================================================
+   * 4. BUSCAR TODOS LOS INTEGRANTES
+   *    DEL GRUPO FAMILIAR
+   * =========================================================
+   */
+
+  const {
+    data: familyPeople,
+    error: familyError,
+  } = await supabase
+    .from("people")
+    .select(
+      `
+        id,
+        name,
+        titular_name
+      `
+    )
+    .eq("event_id", principal.event_id)
+    .eq("titular_name", principal.name)
+    .order("name");
 
   if (familyError) {
     notFound();
   }
 
-  const people = familyPeople ?? [];
+  const people: Person[] =
+    familyPeople ?? [];
 
   /*
-   * 4. Buscar las mesas de todos los integrantes.
+   * =========================================================
+   * 5. BUSCAR LAS MESAS DE TODAS LAS PERSONAS
+   * =========================================================
    */
+
   const personIds = people.map(
     (person) => person.id
   );
 
-  let assignments: {
-    person_id: string;
-    table_number: string | null;
-    table_name: string | null;
-  }[] = [];
+  let assignments: Assignment[] = [];
 
   if (personIds.length > 0) {
     const {
@@ -197,13 +252,16 @@ export default async function PublicMessagePage({
       notFound();
     }
 
-    assignments = assignmentData ?? [];
+    assignments =
+      (assignmentData ?? []) as Assignment[];
   }
 
   /*
-   * 5. Buscar la comunicación específica
-   *    "Asignación de mesas".
+   * =========================================================
+   * 6. BUSCAR LA COMUNICACIÓN
+   * =========================================================
    */
+
   const {
     data: communication,
     error: communicationError,
@@ -236,6 +294,12 @@ export default async function PublicMessagePage({
     notFound();
   }
 
+  /*
+   * =========================================================
+   * 7. TEMA
+   * =========================================================
+   */
+
   const activeColor =
     colorThemes.find(
       (theme) =>
@@ -251,9 +315,11 @@ export default async function PublicMessagePage({
     ) ?? typographyOptions[0];
 
   /*
-   * 6. Crear la información de mesas
-   *    que reemplazará {{asignacion_mesas}}.
+   * =========================================================
+   * 8. MAPA DE ASIGNACIONES
+   * =========================================================
    */
+
   const assignmentByPerson =
     new Map(
       assignments.map((assignment) => [
@@ -262,6 +328,25 @@ export default async function PublicMessagePage({
       ])
     );
 
+  /*
+   * =========================================================
+   * 9. CONSTRUIR LAS TARJETAS DE MESAS
+   *
+   * CORRECCIÓN:
+   *
+   * Si table_number = "Mesa 2"
+   * y table_name = "Mesa 2"
+   *
+   * NO mostramos:
+   *
+   * Mesa Mesa 2 · Mesa 2
+   *
+   * Mostramos solamente:
+   *
+   * Mesa 2
+   * =========================================================
+   */
+
   const assignmentHtml = people
     .map((person) => {
       const assignment =
@@ -269,23 +354,92 @@ export default async function PublicMessagePage({
           person.id
         );
 
-      const tableNumber =
-        assignment?.table_number?.trim() ||
-        "";
+      const rawTableNumber =
+        String(
+          assignment?.table_number ?? ""
+        ).trim();
 
-      const tableName =
-        assignment?.table_name?.trim() ||
-        "";
+      const rawTableName =
+        String(
+          assignment?.table_name ?? ""
+        ).trim();
 
       let tableText =
         "Mesa por confirmar";
 
-      if (tableNumber && tableName) {
-        tableText = `Mesa ${tableNumber} · ${tableName}`;
-      } else if (tableNumber) {
-        tableText = `Mesa ${tableNumber}`;
-      } else if (tableName) {
-        tableText = tableName;
+      const normalizedNumber =
+        rawTableNumber.toLowerCase();
+
+      const normalizedName =
+        rawTableName.toLowerCase();
+
+      if (
+        rawTableNumber &&
+        rawTableName &&
+        normalizedNumber ===
+          normalizedName
+      ) {
+        tableText = rawTableNumber;
+      } else if (
+        rawTableNumber &&
+        rawTableName
+      ) {
+        /*
+         * Si ambos campos son diferentes,
+         * intentamos evitar repetir "Mesa".
+         */
+
+        const cleanNumber =
+          rawTableNumber.replace(
+            /^mesa\s*/i,
+            ""
+          );
+
+        const cleanName =
+          rawTableName.replace(
+            /^mesa\s*/i,
+            ""
+          );
+
+        if (
+          cleanNumber &&
+          cleanName &&
+          cleanNumber.toLowerCase() ===
+            cleanName.toLowerCase()
+        ) {
+          tableText = `Mesa ${cleanNumber}`;
+        } else if (
+          rawTableName
+            .toLowerCase()
+            .startsWith("mesa ")
+        ) {
+          tableText =
+            rawTableName;
+        } else if (
+          rawTableNumber
+            .toLowerCase()
+            .startsWith("mesa ")
+        ) {
+          tableText =
+            rawTableNumber;
+        } else {
+          tableText = `Mesa ${rawTableNumber} · ${rawTableName}`;
+        }
+      } else if (rawTableNumber) {
+        if (
+          rawTableNumber
+            .toLowerCase()
+            .startsWith("mesa ")
+        ) {
+          tableText =
+            rawTableNumber;
+        } else {
+          tableText =
+            `Mesa ${rawTableNumber}`;
+        }
+      } else if (rawTableName) {
+        tableText =
+          rawTableName;
       }
 
       return `
@@ -315,12 +469,20 @@ export default async function PublicMessagePage({
     .join("");
 
   /*
-   * 7. Reemplazar las variables del mensaje.
+   * =========================================================
+   * 10. REEMPLAZAR VARIABLES
+   * =========================================================
+   *
+   * {{nombre_titular}}
+   * {{asignacion_mesas}}
+   * {{nombre_de_los_novios}}
+   * {{nombre_evento}}
    */
+
   const replaceVariables = (
-    html: string
-  ) => {
-    return html
+    content: string
+  ): string => {
+    return content
       .replace(
         /\{\{nombre_titular\}\}/g,
         escapeHtml(principal.name)
@@ -328,8 +490,22 @@ export default async function PublicMessagePage({
       .replace(
         /\{\{asignacion_mesas\}\}/g,
         assignmentHtml
+      )
+      .replace(
+        /\{\{nombre_de_los_novios\}\}/g,
+        escapeHtml(eventName)
+      )
+      .replace(
+        /\{\{nombre_evento\}\}/g,
+        escapeHtml(eventName)
       );
   };
+
+  /*
+   * =========================================================
+   * 11. CONTENIDO FINAL
+   * =========================================================
+   */
 
   const hasHtml =
     typeof communication.content_html ===
@@ -348,6 +524,12 @@ export default async function PublicMessagePage({
     replaceVariables(
       communication.message ?? ""
     );
+
+  /*
+   * =========================================================
+   * 12. RENDER
+   * =========================================================
+   */
 
   return (
     <main
@@ -381,6 +563,7 @@ export default async function PublicMessagePage({
         }}
       >
         {/* BRAND */}
+
         <p
           style={{
             margin: 0,
@@ -395,6 +578,7 @@ export default async function PublicMessagePage({
         </p>
 
         {/* DECORATIVE LINE */}
+
         <div
           style={{
             width: "54px",
@@ -406,6 +590,7 @@ export default async function PublicMessagePage({
         />
 
         {/* TITLE */}
+
         <h1
           style={{
             margin: "24px 0 0",
@@ -430,6 +615,7 @@ export default async function PublicMessagePage({
         </h1>
 
         {/* MESSAGE */}
+
         <div
           style={{
             marginTop: "30px",
@@ -463,6 +649,7 @@ export default async function PublicMessagePage({
         </div>
 
         {/* BUTTON */}
+
         {communication.button_text &&
           communication.button_url && (
             <div
@@ -507,6 +694,7 @@ export default async function PublicMessagePage({
           )}
 
         {/* FOOTER */}
+
         <div
           style={{
             marginTop: "38px",
@@ -557,10 +745,11 @@ export default async function PublicMessagePage({
 }
 
 /*
- * Evita que nombres provenientes de Supabase
- * se interpreten como HTML al insertarlos
- * en el contenido personalizado.
+ * =========================================================
+ * ESCAPAR TEXTO
+ * =========================================================
  */
+
 function escapeHtml(
   value: string
 ): string {
@@ -568,6 +757,12 @@ function escapeHtml(
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
+    .replace(
+      /"/g,
+      "&quot;"
+    )
+    .replace(
+      /'/g,
+      "&#039;"
+    );
 }
