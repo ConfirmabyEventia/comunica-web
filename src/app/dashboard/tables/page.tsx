@@ -2,6 +2,7 @@
 
 import Sidebar from "@/components/studio/Sidebar";
 import CodeGenerator from "@/components/tables/CodeGenerator";
+import { supabase } from "@/lib/supabase/client";
 import * as XLSX from "xlsx";
 import {
   ChangeEvent,
@@ -107,14 +108,47 @@ const DEFAULT_MESSAGE_HTML = `
 <p>Con cariño,<br /><strong><span data-variable="evento" contenteditable="false">{{nombre_evento}}</span></strong></p>
 `;
 
-
 export default function TablesPage() {
-  const [eventName, setEventName] = useState("");
-  const [eventDate, setEventDate] = useState("");
+  const [eventName, setEventName] =
+    useState("");
+
+  const [eventDate, setEventDate] =
+    useState("");
+
   const [eventCreated, setEventCreated] =
     useState(false);
 
-  const [fileName, setFileName] = useState("");
+  const [eventId, setEventId] =
+    useState<string | null>(() => {
+      if (typeof window === "undefined") {
+        return null;
+      }
+
+      return localStorage.getItem(
+        "comunica_current_event_id"
+      );
+    });
+
+  const [existingCodes, setExistingCodes] =
+    useState<
+      {
+        principal_person_id: string;
+        principal_name: string;
+        code: string;
+      }[]
+    >([]);
+
+  const [savedEvents, setSavedEvents] =
+    useState<
+      {
+        id: string;
+        name: string;
+        event_date: string | null;
+      }[]
+    >([]);
+
+  const [fileName, setFileName] =
+    useState("");
 
   const [rows, setRows] =
     useState<TableRow[]>([]);
@@ -125,7 +159,8 @@ export default function TablesPage() {
   const [loading, setLoading] =
     useState(false);
 
-  const [error, setError] = useState("");
+  const [error, setError] =
+    useState("");
 
   const [fileInputKey, setFileInputKey] =
     useState(0);
@@ -135,7 +170,9 @@ export default function TablesPage() {
 
   const [communicationApproved, setCommunicationApproved] =
     useState(false);
-  const editorRef = useRef<HTMLDivElement | null>(null);
+
+  const editorRef =
+    useRef<HTMLDivElement | null>(null);
 
   const [messageHtml, setMessageHtml] =
     useState(DEFAULT_MESSAGE_HTML);
@@ -145,17 +182,18 @@ export default function TablesPage() {
 
   const [selectedFont, setSelectedFont] =
     useState("Editorial");
-useEffect(() => {
-  if (!continued) return;
 
-  if (
-    editorRef.current &&
-    editorRef.current.innerHTML.trim() === ""
-  ) {
-    editorRef.current.innerHTML =
-      DEFAULT_MESSAGE_HTML;
-  }
-}, [continued]);
+  useEffect(() => {
+    if (!continued) return;
+
+    if (
+      editorRef.current &&
+      editorRef.current.innerHTML.trim() === ""
+    ) {
+      editorRef.current.innerHTML =
+        DEFAULT_MESSAGE_HTML;
+    }
+  }, [continued]);
 
   const groups = useMemo(() => {
     return new Set(
@@ -166,6 +204,9 @@ useEffect(() => {
         .filter(Boolean)
     );
   }, [rows]);
+
+  
+
 
   const principals = useMemo(() => {
     return rows.filter(
@@ -220,23 +261,243 @@ useEffect(() => {
       .filter(Boolean)
       .join("\n");
 
-  const handleCreateEvent = () => {
-    setError("");
-    setContinued(false);
-    setCommunicationApproved(false);
-    setMessageHtml(DEFAULT_MESSAGE_HTML);
-    setSelectedPalette("Salvia");
-    setSelectedFont("Editorial");
+      useEffect(() => {
+  const loadSavedEvents = async () => {
+    const { data, error } = await supabase
+      .from("events")
+      .select("id, name, event_date")
+      .order("created_at", {
+        ascending: false,
+      });
 
-    if (!eventName.trim()) {
-      setError(
-        "Escribe el nombre de la celebración."
+    if (error) {
+      console.error(
+        "Error cargando eventos:",
+        error
       );
       return;
     }
 
-    setEventCreated(true);
+    setSavedEvents(data ?? []);
   };
+
+  loadSavedEvents();
+}, []);
+
+
+const handleOpenEvent = async (
+  eventIdToOpen: string,
+  eventNameToOpen: string
+) => {
+  try {
+    setError("");
+    setLoading(true);
+
+    const { data: people, error: peopleError } =
+      await supabase
+        .from("people")
+        .select(
+          "id, name, phone, titular_name"
+        )
+        .eq("event_id", eventIdToOpen);
+
+    if (peopleError) {
+      throw peopleError;
+    }
+
+    const {
+      data: assignments,
+      error: assignmentsError,
+    } = await supabase
+      .from("table_assignments")
+      .select(
+        "person_id, table_number, table_name"
+      )
+      .eq("event_id", eventIdToOpen);
+
+      const {
+  data: groupCodes,
+  error: groupCodesError,
+} = await supabase
+  .from("table_group_codes")
+  .select(
+    "principal_person_id, code"
+  )
+  .eq("event_id", eventIdToOpen);
+
+if (groupCodesError) {
+  throw groupCodesError;
+}
+
+setExistingCodes(
+  (groupCodes ?? []).map((groupCode) => {
+    const principalPerson =
+      people?.find(
+        (person) =>
+          person.id ===
+          groupCode.principal_person_id
+      );
+
+    return {
+      principal_person_id:
+        groupCode.principal_person_id,
+      principal_name:
+        principalPerson?.name?.trim() || "",
+      code: groupCode.code,
+    };
+  })
+);
+
+console.log(
+  "Códigos existentes del evento:",
+  groupCodes
+);
+
+    if (assignmentsError) {
+      throw assignmentsError;
+    }
+
+    const loadedRows: TableRow[] =
+      (people ?? []).map((person) => {
+        const assignment =
+          assignments?.find(
+            (item) =>
+              item.person_id === person.id
+          );
+
+        const isPrincipal =
+          person.name.trim() ===
+          (person.titular_name ?? "").trim();
+
+        return {
+          Group:
+            person.titular_name?.trim() ||
+            person.name.trim(),
+
+          "Principal Contact":
+            isPrincipal ? 1 : 0,
+
+          "Full Name":
+            person.name.trim(),
+
+          Phone:
+            person.phone?.trim() || "",
+
+          Table:
+            assignment?.table_number?.trim() ||
+            assignment?.table_name?.trim() ||
+            "",
+        };
+      });
+
+    setRows(loadedRows);
+    setEventId(eventIdToOpen);
+    setEventName(eventNameToOpen);
+    setEventCreated(true);
+    setContinued(true);
+
+    localStorage.setItem(
+      "comunica_current_event_id",
+      eventIdToOpen
+    );
+
+    console.log(
+      "Evento abierto:",
+      eventNameToOpen
+    );
+    console.log(
+      "Personas cargadas:",
+      loadedRows.length
+    );
+    console.log(
+      "Asignaciones cargadas:",
+      assignments?.length ?? 0
+    );
+  } catch (err) {
+    console.error(
+      "Error abriendo evento:",
+      err
+    );
+
+    setError(
+      err instanceof Error
+        ? err.message
+        : "No fue posible abrir el evento."
+    );
+  } finally {
+    setLoading(false);
+  }
+};
+const handleCreateEvent = async () => {
+  setError("");
+  setContinued(false);
+  setCommunicationApproved(false);
+  setMessageHtml(DEFAULT_MESSAGE_HTML);
+  setSelectedPalette("Salvia");
+  setSelectedFont("Editorial");
+
+  if (!eventName.trim()) {
+    setError(
+      "Escribe el nombre de la celebración."
+    );
+    return;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("events")
+      .insert({
+        name: eventName.trim(),
+        source: "file",
+      })
+      .select("id")
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+   
+setEventId(data.id);
+
+setExistingCodes([]);
+
+localStorage.setItem(
+  "comunica_current_event_id",
+  data.id
+);
+
+setEventCreated(true);
+setSavedEvents((current) => [
+  {
+    id: data.id,
+    name: eventName.trim(),
+    event_date: eventDate || null,
+  },
+  ...current.filter(
+    (event) => event.id !== data.id
+  ),
+]);
+
+localStorage.setItem(
+  "comunica_current_event_id",
+  data.id
+);
+
+setEventCreated(true);
+  } catch (err) {
+    console.error(
+      "Error creando evento:",
+      err
+    );
+
+    setError(
+      err instanceof Error
+        ? err.message
+        : "No fue posible crear el evento."
+    );
+  }
+};
 
   const handleFileChange = async (
     event: ChangeEvent<HTMLInputElement>
@@ -340,7 +601,105 @@ useEffect(() => {
           normalizedRows
         );
 
-      setRows(normalizedRows);
+     setRows(normalizedRows);
+setIssues(validationIssues);
+
+if (eventId) {
+  const peopleToInsert =
+    normalizedRows.map((row) => ({
+      event_id: eventId,
+      name: row["Full Name"].trim(),
+      phone:
+        Number(row["Principal Contact"]) === 1
+          ? row.Phone.trim()
+          : null,
+      titular_name:
+  normalizedRows.find(
+    (principal) =>
+      principal.Group.trim() ===
+        row.Group.trim() &&
+      Number(
+        principal["Principal Contact"]
+      ) === 1
+  )?.["Full Name"]?.trim() ||
+  row["Full Name"].trim(),
+    }));
+
+  const { error: peopleError } =
+    await supabase
+      .from("people")
+      .insert(peopleToInsert);
+
+  if (peopleError) {
+    throw peopleError;
+  }
+}
+
+// GUARDAR ASIGNACIONES DE MESAS
+if (eventId) {
+  const { data: savedPeople, error: savedPeopleError } =
+    await supabase
+      .from("people")
+      .select("id, name, event_id")
+      .eq("event_id", eventId);
+
+  if (savedPeopleError) {
+    throw savedPeopleError;
+  }
+
+  const assignmentsToInsert = normalizedRows
+    .filter(
+      (row) =>
+        row["Full Name"].trim() &&
+        row.Table.trim()
+    )
+    .map((row) => {
+      const person = savedPeople?.find(
+        (item) =>
+          item.name.trim() ===
+            row["Full Name"].trim() &&
+          item.event_id === eventId
+      );
+
+      if (!person) {
+        return null;
+      }
+
+      return {
+        event_id: eventId,
+        person_id: person.id,
+        table_number: row.Table.trim(),
+        table_name: row.Table.trim(),
+      };
+    })
+    .filter(
+      (
+        assignment
+      ): assignment is {
+        event_id: string;
+        person_id: string;
+        table_number: string;
+        table_name: string;
+      } => assignment !== null
+    );
+
+  if (assignmentsToInsert.length > 0) {
+    const {
+      error: assignmentsError,
+    } = await supabase
+      .from("table_assignments")
+      .insert(assignmentsToInsert);
+
+    if (assignmentsError) {
+      throw assignmentsError;
+    }
+  }
+
+  console.log(
+    "Asignaciones de mesas guardadas:",
+    assignmentsToInsert.length
+  );
+}
       setIssues(validationIssues);
     } catch (err) {
       console.error(
@@ -381,6 +740,11 @@ useEffect(() => {
     setContinued(false);
     setCommunicationApproved(false);
     resetFile();
+    setEventId(null);
+
+localStorage.removeItem(
+  "comunica_current_event_id"
+);
   };
 
   const handleContinue = () => {
@@ -526,6 +890,118 @@ useEffect(() => {
           </div>
 
           {/* EVENT CARD */}
+
+          {savedEvents.length > 0 && (
+  <section
+    style={{
+      background: "#FFFFFF",
+      border:
+        "1px solid var(--color-border)",
+      borderRadius: "24px",
+      padding: "28px 34px",
+      marginBottom: "24px",
+    }}
+  >
+    <p
+      style={{
+        margin: 0,
+        fontFamily: "var(--font-body)",
+        fontSize: "0.7rem",
+        letterSpacing: "0.14em",
+        textTransform: "uppercase",
+        color: "var(--color-accent)",
+      }}
+    >
+      Eventos guardados
+    </p>
+
+    <h2
+      style={{
+        margin: "7px 0 0",
+        fontFamily: "var(--font-display)",
+        fontSize: "1.6rem",
+        fontWeight: 500,
+        color: "var(--color-text)",
+      }}
+    >
+      Mis eventos
+    </h2>
+
+    <div
+      style={{
+        display: "grid",
+        gap: "10px",
+        marginTop: "20px",
+      }}
+    >
+      {savedEvents.map((event) => (
+        <div
+          key={event.id}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "16px",
+            padding: "16px 18px",
+            border:
+              "1px solid var(--color-border)",
+            borderRadius: "16px",
+          }}
+        >
+          <div>
+            <p
+              style={{
+                margin: 0,
+                fontFamily: "var(--font-body)",
+                fontSize: "0.95rem",
+                fontWeight: 500,
+                color: "var(--color-text)",
+              }}
+            >
+              {event.name}
+            </p>
+
+            {event.event_date && (
+              <p
+                style={{
+                  margin: "4px 0 0",
+                  fontFamily: "var(--font-body)",
+                  fontSize: "0.78rem",
+                  color:
+                    "var(--color-text-muted)",
+                }}
+              >
+                {event.event_date}
+              </p>
+            )}
+          </div>
+
+      <button
+  type="button"
+ onClick={() =>
+  handleOpenEvent(
+    event.id,
+    event.name
+  )
+}
+  style={{
+    border: "none",
+    background: "transparent",
+    padding: "8px 0",
+    fontFamily: "var(--font-body)",
+    fontSize: "0.82rem",
+    color: "var(--color-accent)",
+    cursor: "pointer",
+    fontWeight: 500,
+  }}
+>
+  Abrir evento →
+</button>
+        </div>
+      ))}
+    </div>
+  </section>
+)}
 
           {!eventCreated ? (
             <section
@@ -2299,6 +2775,8 @@ useEffect(() => {
     <CodeGenerator
       rows={rows}
       eventName={eventName}
+      eventId={eventId}
+      existingCodes={existingCodes}
     />
   </>
 )}

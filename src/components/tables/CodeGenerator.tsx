@@ -1,11 +1,16 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
 import {
   buildFinalTableRows,
   downloadTablesExcel,
 } from "@/lib/tables/generateTablesExcel";
+import { supabase } from "@/lib/supabase/client";
 
 import type {
   TableImportRow,
@@ -14,6 +19,12 @@ import type {
 type CodeGeneratorProps = {
   rows: TableImportRow[];
   eventName: string;
+  eventId: string | null;
+  existingCodes: {
+    principal_person_id: string;
+    principal_name: string;
+    code: string;
+  }[];
 };
 
 type GeneratedGroup = {
@@ -28,9 +39,18 @@ type GeneratedGroup = {
 export default function CodeGenerator({
   rows,
   eventName,
+  eventId,
+  existingCodes,
 }: CodeGeneratorProps) {
+  
   const [generated, setGenerated] =
     useState(false);
+
+    useEffect(() => {
+  if (existingCodes.length > 0) {
+    setGenerated(true);
+  }
+}, [existingCodes]);
 
   const groups = useMemo(() => {
     const map = new Map<
@@ -118,22 +138,115 @@ export default function CodeGenerator({
 
             tables,
 
-            code:
-              finalPrincipal?.Code ??
-              "",
+        
+  code:
+  existingCodes.find(
+    (item) =>
+      item.principal_name ===
+      String(
+        principal?.["Full Name"] ?? ""
+      ).trim()
+  )?.code ??
+  finalPrincipal?.Code ??
+  "",
           };
         }
       );
     }, [
-      generated,
-      rows,
-      groups,
-    ]);
+  generated,
+  rows,
+  groups,
+  existingCodes,
+]);
 
-  const handleGenerate =
-    () => {
-      setGenerated(true);
-    };
+const handleGenerate = async () => {
+  if (!eventId) {
+    console.error(
+      "CodeGenerator: falta eventId"
+    );
+    alert(
+      "No se encontró el ID del evento."
+    );
+    return;
+  }
+
+  try {
+    const finalRows =
+      buildFinalTableRows(rows);
+
+    const principalRows =
+      finalRows.filter(
+        (row) =>
+          row["Principal Contact"] === 1 &&
+          row.Code
+      );
+
+    const peopleResult =
+      await supabase
+        .from("people")
+        .select("id, name, event_id")
+        .eq("event_id", eventId);
+
+    if (peopleResult.error) {
+      throw peopleResult.error;
+    }
+
+const codesToInsert: {
+  event_id: string;
+  principal_person_id: string;
+  code: string;
+}[] = [];
+
+for (const row of principalRows) {
+  const person =
+    peopleResult.data.find(
+      (item) =>
+        item.name.trim() ===
+          row["Full Name"].trim() &&
+        item.event_id === eventId
+    );
+
+  if (!person) {
+    continue;
+  }
+
+  codesToInsert.push({
+    event_id: eventId,
+    principal_person_id:
+      person.id,
+    code: row.Code,
+  });
+}
+alert(
+  `Personas encontradas: ${peopleResult.data.length}\n` +
+  `Titulares con código: ${principalRows.length}\n` +
+  `Códigos para guardar: ${codesToInsert.length}`
+);
+    if (codesToInsert.length > 0) {
+      const { error } =
+        await supabase
+          .from("table_group_codes")
+          .upsert(
+            codesToInsert,
+            {
+              onConflict:
+                "event_id,principal_person_id",
+            }
+          );
+
+      if (error) {
+        throw error;
+      }
+    }
+
+    setGenerated(true);
+  } catch (err) {
+    console.error(
+      "Error generando códigos:",
+      err
+    );
+  }
+};
 
   const handleDownload =
     () => {
