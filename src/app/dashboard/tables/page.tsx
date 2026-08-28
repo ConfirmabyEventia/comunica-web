@@ -1,6 +1,7 @@
 "use client";
 
 import Sidebar from "@/components/studio/Sidebar";
+import CodeGenerator from "@/components/tables/CodeGenerator";
 import * as XLSX from "xlsx";
 import {
   ChangeEvent,
@@ -2278,23 +2279,29 @@ useEffect(() => {
                         </button>
                       </div>
 
-                      {communicationApproved && (
-                        <div
-                          style={{
-                            marginTop: "18px",
-                            padding: "14px 16px",
-                            borderRadius: "14px",
-                            background: "#EEF0E7",
-                            color: "#6F7555",
-                            fontSize: "0.88rem",
-                            lineHeight: 1.5,
-                          }}
-                        >
-                          ✓ Comunicación aprobada.
-                          El siguiente paso será generar
-                          los códigos personalizados.
-                        </div>
-                      )}
+             {communicationApproved && (
+  <>
+    <div
+      style={{
+        marginTop: "18px",
+        padding: "14px 16px",
+        borderRadius: "14px",
+        background: "#EEF0E7",
+        color: "#6F7555",
+        fontSize: "0.88rem",
+        lineHeight: 1.5,
+      }}
+    >
+      ✓ Comunicación aprobada.
+      Ahora puedes generar los códigos personalizados.
+    </div>
+
+    <CodeGenerator
+      rows={rows}
+      eventName={eventName}
+    />
+  </>
+)}
                     </section>
                             
                   )}
