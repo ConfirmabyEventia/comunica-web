@@ -33,6 +33,7 @@ const REQUIRED_COLUMNS = [
 const MESSAGE_VARIABLES = {
   titular: "{{nombre_titular}}",
   mesas: "{{asignacion_mesas}}",
+  evento: "{{nombre_evento}}",
 } as const;
 
 const COLOR_PALETTES = [
@@ -102,7 +103,7 @@ const DEFAULT_MESSAGE_HTML = `
 <p>Cada persona tiene una mesa asignada, así que te recomendamos revisar la información con atención.</p>
 <p>Estamos felices de recibirlos y esperamos que disfruten muchísimo este momento con nosotros. ✨</p>
 <p><strong>Nos vemos muy pronto.</strong></p>
-<p>Con cariño,<br /><strong>Tu celebración</strong></p>
+<p>Con cariño,<br /><strong><span data-variable="evento" contenteditable="false">{{nombre_evento}}</span></strong></p>
 `;
 
 
@@ -1887,6 +1888,19 @@ useEffect(() => {
                               }}
                             >
                               {MESSAGE_VARIABLES.mesas}
+
+                              <span
+  style={{
+    display: "inline-block",
+    margin: "3px 0 0 3px",
+    padding: "4px 7px",
+    borderRadius: "7px",
+    background: "#E8E5DA",
+    color: "#6B6B58",
+  }}
+>
+  {MESSAGE_VARIABLES.evento}
+</span>
                             </span>
                           </div>
 
@@ -2142,7 +2156,11 @@ useEffect(() => {
                                     firstGroupAssignment ||
                                     "Asignación de mesas"
                                   }</span>`
-                                );
+                                )
+                                .replaceAll(
+  "{{nombre_evento}}",
+  eventName || "Nombre del evento"
+);
 
                             return (
                               <div
