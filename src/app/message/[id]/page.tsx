@@ -22,6 +22,18 @@ type Typography = {
   fontFamily: string;
 };
 
+type Person = {
+  id: string;
+  name: string;
+  titular_name: string | null;
+};
+
+type Assignment = {
+  person_id: string;
+  table_number: string | null;
+  table_name: string | null;
+};
+
 const colorThemes: ColorTheme[] = [
   {
     id: "salvia",
@@ -88,30 +100,81 @@ const typographyOptions: Typography[] = [
   },
 ];
 
-type Person = {
-  id: string;
-  name: string;
-  titular_name: string | null;
-};
-
-type Assignment = {
-  person_id: string;
-  table_number: string | null;
-  table_name: string | null;
-};
-
 export default async function PublicMessagePage({
   params,
 }: Props) {
   const { id } = await params;
 
-  const publicCode = id.trim().toUpperCase();
+  const publicId = id.trim();
 
   /*
    * =========================================================
-   * 1. BUSCAR EL CÓDIGO DEL TITULAR
+   * 1. PRIMERO INTENTAMOS BUSCAR UNA COMUNICACIÓN NORMAL
+   *
+   * Ejemplo:
+   *
+   * /message/1da250cd-d50e-44ce-8b7c-29c1428780bf
+   *
+   * Si existe una comunicación publicada con ese UUID,
+   * la mostramos directamente.
+   *
+   * NO buscamos códigos, titulares ni mesas.
    * =========================================================
    */
+
+  const {
+    data: directCommunication,
+    error: directCommunicationError,
+  } = await supabase
+    .from("communications")
+    .select(
+      `
+        id,
+        title,
+        message,
+        content_html,
+        color_theme,
+        typography,
+        button_text,
+        button_url,
+        is_published
+      `
+    )
+    .eq("id", publicId)
+    .eq("is_published", true)
+    .maybeSingle();
+
+  /*
+   * =========================================================
+   * 2. SI ES UNA COMUNICACIÓN NORMAL
+   * =========================================================
+   */
+
+  if (
+    !directCommunicationError &&
+    directCommunication
+  ) {
+    return (
+      <PublicCommunication
+        communication={directCommunication}
+      />
+    );
+  }
+
+  /*
+   * =========================================================
+   * 3. SI NO ES UUID DE COMUNICACIÓN,
+   *    INTENTAMOS COMO CÓDIGO DE TITULAR
+   *
+   * Esto mantiene funcionando:
+   *
+   * /message/E95UJG
+   *
+   * para comunicaciones personalizadas de mesas.
+   * =========================================================
+   */
+
+  const publicCode = publicId.toUpperCase();
 
   const {
     data: groupCode,
@@ -125,15 +188,18 @@ export default async function PublicMessagePage({
       `
     )
     .eq("code", publicCode)
-    .single();
+    .maybeSingle();
 
-  if (groupCodeError || !groupCode) {
+  if (
+    groupCodeError ||
+    !groupCode
+  ) {
     notFound();
   }
 
   /*
    * =========================================================
-   * 2. BUSCAR AL TITULAR
+   * 4. BUSCAR TITULAR
    * =========================================================
    */
 
@@ -156,21 +222,16 @@ export default async function PublicMessagePage({
     )
     .single();
 
-  if (principalError || !principal) {
+  if (
+    principalError ||
+    !principal
+  ) {
     notFound();
   }
 
   /*
    * =========================================================
-   * 3. BUSCAR EL EVENTO
-   *
-   * El nombre del evento será utilizado para:
-   *
-   * {{nombre_de_los_novios}}
-   *
-   * y también:
-   *
-   * {{nombre_evento}}
+   * 5. BUSCAR EVENTO
    * =========================================================
    */
 
@@ -183,7 +244,10 @@ export default async function PublicMessagePage({
     .eq("id", principal.event_id)
     .single();
 
-  if (eventError || !event) {
+  if (
+    eventError ||
+    !event
+  ) {
     notFound();
   }
 
@@ -192,8 +256,7 @@ export default async function PublicMessagePage({
 
   /*
    * =========================================================
-   * 4. BUSCAR TODOS LOS INTEGRANTES
-   *    DEL GRUPO FAMILIAR
+   * 6. BUSCAR GRUPO FAMILIAR
    * =========================================================
    */
 
@@ -209,8 +272,14 @@ export default async function PublicMessagePage({
         titular_name
       `
     )
-    .eq("event_id", principal.event_id)
-    .eq("titular_name", principal.name)
+    .eq(
+      "event_id",
+      principal.event_id
+    )
+    .eq(
+      "titular_name",
+      principal.name
+    )
     .order("name");
 
   if (familyError) {
@@ -222,7 +291,7 @@ export default async function PublicMessagePage({
 
   /*
    * =========================================================
-   * 5. BUSCAR LAS MESAS DE TODAS LAS PERSONAS
+   * 7. BUSCAR ASIGNACIONES
    * =========================================================
    */
 
@@ -245,20 +314,27 @@ export default async function PublicMessagePage({
           table_name
         `
       )
-      .eq("event_id", principal.event_id)
-      .in("person_id", personIds);
+      .eq(
+        "event_id",
+        principal.event_id
+      )
+      .in(
+        "person_id",
+        personIds
+      );
 
     if (assignmentError) {
       notFound();
     }
 
     assignments =
-      (assignmentData ?? []) as Assignment[];
+      (assignmentData ??
+        []) as Assignment[];
   }
 
   /*
    * =========================================================
-   * 6. BUSCAR LA COMUNICACIÓN
+   * 8. BUSCAR COMUNICACIÓN DE MESAS
    * =========================================================
    */
 
@@ -284,7 +360,10 @@ export default async function PublicMessagePage({
       "internal_name",
       "Asignación de mesas"
     )
-    .eq("is_published", true)
+    .eq(
+      "is_published",
+      true
+    )
     .single();
 
   if (
@@ -296,7 +375,7 @@ export default async function PublicMessagePage({
 
   /*
    * =========================================================
-   * 7. TEMA
+   * 9. TEMA
    * =========================================================
    */
 
@@ -316,34 +395,23 @@ export default async function PublicMessagePage({
 
   /*
    * =========================================================
-   * 8. MAPA DE ASIGNACIONES
+   * 10. MAPA DE ASIGNACIONES
    * =========================================================
    */
 
   const assignmentByPerson =
     new Map(
-      assignments.map((assignment) => [
-        assignment.person_id,
-        assignment,
-      ])
+      assignments.map(
+        (assignment) => [
+          assignment.person_id,
+          assignment,
+        ]
+      )
     );
 
   /*
    * =========================================================
-   * 9. CONSTRUIR LAS TARJETAS DE MESAS
-   *
-   * CORRECCIÓN:
-   *
-   * Si table_number = "Mesa 2"
-   * y table_name = "Mesa 2"
-   *
-   * NO mostramos:
-   *
-   * Mesa Mesa 2 · Mesa 2
-   *
-   * Mostramos solamente:
-   *
-   * Mesa 2
+   * 11. CONSTRUIR ASIGNACIONES
    * =========================================================
    */
 
@@ -356,12 +424,14 @@ export default async function PublicMessagePage({
 
       const rawTableNumber =
         String(
-          assignment?.table_number ?? ""
+          assignment?.table_number ??
+            ""
         ).trim();
 
       const rawTableName =
         String(
-          assignment?.table_name ?? ""
+          assignment?.table_name ??
+            ""
         ).trim();
 
       let tableText =
@@ -379,16 +449,12 @@ export default async function PublicMessagePage({
         normalizedNumber ===
           normalizedName
       ) {
-        tableText = rawTableNumber;
+        tableText =
+          rawTableNumber;
       } else if (
         rawTableNumber &&
         rawTableName
       ) {
-        /*
-         * Si ambos campos son diferentes,
-         * intentamos evitar repetir "Mesa".
-         */
-
         const cleanNumber =
           rawTableNumber.replace(
             /^mesa\s*/i,
@@ -407,7 +473,8 @@ export default async function PublicMessagePage({
           cleanNumber.toLowerCase() ===
             cleanName.toLowerCase()
         ) {
-          tableText = `Mesa ${cleanNumber}`;
+          tableText =
+            `Mesa ${cleanNumber}`;
         } else if (
           rawTableName
             .toLowerCase()
@@ -423,9 +490,12 @@ export default async function PublicMessagePage({
           tableText =
             rawTableNumber;
         } else {
-          tableText = `Mesa ${rawTableNumber} · ${rawTableName}`;
+          tableText =
+            `Mesa ${rawTableNumber} · ${rawTableName}`;
         }
-      } else if (rawTableNumber) {
+      } else if (
+        rawTableNumber
+      ) {
         if (
           rawTableNumber
             .toLowerCase()
@@ -437,7 +507,9 @@ export default async function PublicMessagePage({
           tableText =
             `Mesa ${rawTableNumber}`;
         }
-      } else if (rawTableName) {
+      } else if (
+        rawTableName
+      ) {
         tableText =
           rawTableName;
       }
@@ -470,13 +542,8 @@ export default async function PublicMessagePage({
 
   /*
    * =========================================================
-   * 10. REEMPLAZAR VARIABLES
+   * 12. REEMPLAZAR VARIABLES
    * =========================================================
-   *
-   * {{nombre_titular}}
-   * {{asignacion_mesas}}
-   * {{nombre_de_los_novios}}
-   * {{nombre_evento}}
    */
 
   const replaceVariables = (
@@ -503,7 +570,7 @@ export default async function PublicMessagePage({
 
   /*
    * =========================================================
-   * 11. CONTENIDO FINAL
+   * 13. CONTENIDO FINAL
    * =========================================================
    */
 
@@ -514,10 +581,9 @@ export default async function PublicMessagePage({
       .trim()
       .length > 0;
 
-  const renderedHtml = hasHtml
-    ? replaceVariables(
-        communication.content_html
-      )
+ const renderedHtml =
+  hasHtml
+    ? communication.content_html ?? ""
     : "";
 
   const renderedMessage =
@@ -527,7 +593,7 @@ export default async function PublicMessagePage({
 
   /*
    * =========================================================
-   * 12. RENDER
+   * 14. RENDER PERSONALIZADO
    * =========================================================
    */
 
@@ -562,8 +628,6 @@ export default async function PublicMessagePage({
             "0 16px 45px rgba(60, 50, 35, 0.06)",
         }}
       >
-        {/* BRAND */}
-
         <p
           style={{
             margin: 0,
@@ -577,8 +641,6 @@ export default async function PublicMessagePage({
           EVENSSE · COMUNICA
         </p>
 
-        {/* DECORATIVE LINE */}
-
         <div
           style={{
             width: "54px",
@@ -588,8 +650,6 @@ export default async function PublicMessagePage({
               activeColor.color,
           }}
         />
-
-        {/* TITLE */}
 
         <h1
           style={{
@@ -607,14 +667,13 @@ export default async function PublicMessagePage({
                 ? 400
                 : 500,
             lineHeight: 1.08,
-            color: activeColor.color,
+            color:
+              activeColor.color,
             textAlign: "center",
           }}
         >
           {communication.title}
         </h1>
-
-        {/* MESSAGE */}
 
         <div
           style={{
@@ -640,7 +699,8 @@ export default async function PublicMessagePage({
           ) : (
             <div
               style={{
-                whiteSpace: "pre-wrap",
+                whiteSpace:
+                  "pre-wrap",
               }}
             >
               {renderedMessage}
@@ -648,14 +708,13 @@ export default async function PublicMessagePage({
           )}
         </div>
 
-        {/* BUTTON */}
-
         {communication.button_text &&
           communication.button_url && (
             <div
               style={{
                 display: "flex",
-                justifyContent: "center",
+                justifyContent:
+                  "center",
               }}
             >
               <a
@@ -667,21 +726,26 @@ export default async function PublicMessagePage({
                 style={{
                   display:
                     "inline-flex",
-                  alignItems: "center",
+                  alignItems:
+                    "center",
                   justifyContent:
                     "center",
                   marginTop: "30px",
                   minHeight: "48px",
-                  padding: "0 24px",
-                  borderRadius: "999px",
+                  padding:
+                    "0 24px",
+                  borderRadius:
+                    "999px",
                   background:
                     activeColor.color,
                   color: "#FFFFFF",
                   fontFamily:
                     "'Montserrat', sans-serif",
-                  fontSize: "0.9rem",
+                  fontSize:
+                    "0.9rem",
                   fontWeight: 500,
-                  textDecoration: "none",
+                  textDecoration:
+                    "none",
                   boxShadow:
                     "0 8px 20px rgba(60, 50, 35, 0.10)",
                 }}
@@ -693,13 +757,12 @@ export default async function PublicMessagePage({
             </div>
           )}
 
-        {/* FOOTER */}
-
         <div
           style={{
             marginTop: "38px",
             paddingTop: "22px",
-            borderTop: `1px solid ${activeColor.color}20`,
+            borderTop:
+              `1px solid ${activeColor.color}20`,
             textAlign: "center",
           }}
         >
@@ -707,8 +770,10 @@ export default async function PublicMessagePage({
             style={{
               fontFamily:
                 "'Montserrat', sans-serif",
-              fontSize: "0.68rem",
-              letterSpacing: "0.14em",
+              fontSize:
+                "0.68rem",
+              letterSpacing:
+                "0.14em",
               textTransform:
                 "uppercase",
               color: "#99918A",
@@ -746,17 +811,295 @@ export default async function PublicMessagePage({
 
 /*
  * =========================================================
- * ESCAPAR TEXTO
+ * COMUNICACIÓN NORMAL
  * =========================================================
  */
+
+function PublicCommunication({
+  communication,
+}: {
+  communication: {
+    id: string;
+    title: string;
+    message: string | null;
+    content_html: string | null;
+    color_theme: string | null;
+    typography: string | null;
+    button_text: string | null;
+    button_url: string | null;
+    is_published: boolean;
+  };
+}) {
+  const activeColor =
+    colorThemes.find(
+      (theme) =>
+        theme.id ===
+        communication.color_theme
+    ) ?? colorThemes[0];
+
+  const activeTypography =
+    typographyOptions.find(
+      (font) =>
+        font.id ===
+        communication.typography
+    ) ?? typographyOptions[0];
+
+  const hasHtml =
+    typeof communication.content_html ===
+      "string" &&
+    communication.content_html
+      .trim()
+      .length > 0;
+
+  const renderedHtml =
+    hasHtml
+      ? communication.content_html
+      : "";
+
+  return (
+    <main
+      style={{
+        minHeight: "100vh",
+        boxSizing: "border-box",
+        padding: "34px 20px 60px",
+        background: `linear-gradient(
+          180deg,
+          ${activeColor.soft} 0%,
+          #FBF9F4 48%,
+          #F8F5EF 100%
+        )`,
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "flex-start",
+      }}
+    >
+      <article
+        style={{
+          width: "100%",
+          maxWidth: "680px",
+          marginTop: "7vh",
+          background: "#FFFFFF",
+          border: `1px solid ${activeColor.color}30`,
+          borderRadius: "30px",
+          padding: "42px 40px",
+          boxSizing: "border-box",
+          boxShadow:
+            "0 16px 45px rgba(60, 50, 35, 0.06)",
+        }}
+      >
+        <p
+          style={{
+            margin: 0,
+            fontSize: "0.7rem",
+            letterSpacing: "0.2em",
+            textTransform: "uppercase",
+            color:
+              activeColor.color,
+            textAlign: "center",
+          }}
+        >
+          EVENSSE · COMUNICA
+        </p>
+
+        <div
+          style={{
+            width: "54px",
+            height: "1px",
+            margin: "24px auto 0",
+            background:
+              activeColor.color,
+          }}
+        />
+
+        <h1
+          style={{
+            margin:
+              "24px 0 0",
+            fontFamily:
+              activeTypography.fontFamily,
+            fontSize:
+              activeTypography.id ===
+              "romantica"
+                ? "clamp(2.8rem, 8vw, 4rem)"
+                : "clamp(2.15rem, 6vw, 3.4rem)",
+            fontWeight:
+              activeTypography.id ===
+              "romantica"
+                ? 400
+                : 500,
+            lineHeight: 1.08,
+            color:
+              activeColor.color,
+            textAlign: "center",
+          }}
+        >
+          {communication.title}
+        </h1>
+
+        <div
+          style={{
+            marginTop:
+              "30px",
+            fontFamily:
+              activeTypography.fontFamily,
+            fontSize:
+              activeTypography.id ===
+              "romantica"
+                ? "1.35rem"
+                : "1rem",
+            lineHeight:
+              1.75,
+            color:
+              "#4F4A45",
+            overflowWrap:
+              "anywhere",
+          }}
+        >
+     {hasHtml ? (
+  <div
+    dangerouslySetInnerHTML={{
+      __html: String(renderedHtml ?? ""),
+    }}
+  />
+) : (
+            <div
+              style={{
+                whiteSpace:
+                  "pre-wrap",
+              }}
+            >
+              {communication.message ??
+                ""}
+            </div>
+          )}
+        </div>
+
+        {communication.button_text &&
+          communication.button_url && (
+            <div
+              style={{
+                display:
+                  "flex",
+                justifyContent:
+                  "center",
+              }}
+            >
+              <a
+                href={
+                  communication.button_url
+                }
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  display:
+                    "inline-flex",
+                  alignItems:
+                    "center",
+                  justifyContent:
+                    "center",
+                  marginTop:
+                    "30px",
+                  minHeight:
+                    "48px",
+                  padding:
+                    "0 24px",
+                  borderRadius:
+                    "999px",
+                  background:
+                    activeColor.color,
+                  color:
+                    "#FFFFFF",
+                  fontFamily:
+                    "'Montserrat', sans-serif",
+                  fontSize:
+                    "0.9rem",
+                  fontWeight:
+                    500,
+                  textDecoration:
+                    "none",
+                  boxShadow:
+                    "0 8px 20px rgba(60, 50, 35, 0.10)",
+                }}
+              >
+                {
+                  communication.button_text
+                }
+              </a>
+            </div>
+          )}
+
+        <div
+          style={{
+            marginTop:
+              "38px",
+            paddingTop:
+              "22px",
+            borderTop:
+              `1px solid ${activeColor.color}20`,
+            textAlign:
+              "center",
+          }}
+        >
+          <span
+            style={{
+              fontFamily:
+                "'Montserrat', sans-serif",
+              fontSize:
+                "0.68rem",
+              letterSpacing:
+                "0.14em",
+              textTransform:
+                "uppercase",
+              color:
+                "#99918A",
+            }}
+          >
+            COMUNICA · EVENSSE
+          </span>
+        </div>
+      </article>
+
+      <style>
+        {`
+          img {
+            max-width: 100%;
+            height: auto;
+          }
+
+          article p {
+            margin-left: 0;
+            margin-right: 0;
+          }
+
+          article img {
+            display: block;
+          }
+
+          article a {
+            overflow-wrap: anywhere;
+          }
+        `}
+      </style>
+    </main>
+  );
+}
 
 function escapeHtml(
   value: string
 ): string {
   return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
+    .replace(
+      /&/g,
+      "&amp;"
+    )
+    .replace(
+      /</g,
+      "&lt;"
+    )
+    .replace(
+      />/g,
+      "&gt;"
+    )
     .replace(
       /"/g,
       "&quot;"
