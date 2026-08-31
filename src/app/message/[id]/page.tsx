@@ -581,9 +581,11 @@ export default async function PublicMessagePage({
       .trim()
       .length > 0;
 
- const renderedHtml =
+const renderedHtml =
   hasHtml
-    ? communication.content_html ?? ""
+    ? replaceVariables(
+        communication.content_html ?? ""
+      )
     : "";
 
   const renderedMessage =

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+
 import Sidebar from "@/components/studio/Sidebar";
 import { supabase } from "@/lib/supabase/client";
 
@@ -11,11 +12,11 @@ type Communication = {
   title: string;
   message: string;
   content_html: string | null;
+  button_text: string | null;
+  button_url: string | null;
   status: "Borrador" | "Enviada";
   color_theme: string | null;
   typography: string | null;
-  button_text: string | null;
-  button_url: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -33,7 +34,7 @@ const typographyNames: Record<string, string> = {
   editorial: "Editorial",
   clasica: "Clásica",
   contemporanea: "Contemporánea",
-  romantica: "Suave",
+  romantica: "Romántica",
 };
 
 export default function CommunicationsPage() {
@@ -42,12 +43,12 @@ export default function CommunicationsPage() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [savingTemplateId, setSavingTemplateId] =
+
+  const [updatingId, setUpdatingId] =
     useState<string | null>(null);
 
-  useEffect(() => {
-    loadCommunications();
-  }, []);
+  const [savingTemplateId, setSavingTemplateId] =
+    useState<string | null>(null);
 
   async function loadCommunications() {
     try {
@@ -64,11 +65,11 @@ export default function CommunicationsPage() {
               title,
               message,
               content_html,
+              button_text,
+              button_url,
               status,
               color_theme,
               typography,
-              button_text,
-              button_url,
               created_at,
               updated_at
             `
@@ -100,50 +101,146 @@ export default function CommunicationsPage() {
     }
   }
 
-  async function saveAsTemplate(
+  useEffect(() => {
+    loadCommunications();
+  }, []);
+
+  /*
+   * =========================================================
+   * MARCAR COMO ENVIADA
+   * =========================================================
+   */
+
+  async function handleMarkAsSent(
     communication: Communication
   ) {
+    const confirmed = window.confirm(
+      `¿Quieres marcar "${communication.title}" como enviada?`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
     try {
-      setSavingTemplateId(communication.id);
+      setUpdatingId(communication.id);
       setError("");
 
-      const { error: insertError } =
+      const { error: updateError } =
         await supabase
-          .from("communication_templates")
-          .insert({
-            name: communication.title,
-            description:
-              communication.internal_name || null,
-            message: communication.message || "",
-            content_html:
-              communication.content_html || null,
-            color_theme:
-              communication.color_theme || null,
-            typography:
-              communication.typography || null,
-            button_text:
-              communication.button_text || null,
-            button_url:
-              communication.button_url || null,
-          });
+          .from("communications")
+          .update({
+            status: "Enviada",
+            updated_at:
+              new Date().toISOString(),
+          })
+          .eq(
+            "id",
+            communication.id
+          );
 
-      if (insertError) {
-        throw insertError;
+      if (updateError) {
+        throw updateError;
       }
 
-      alert(
-        `"${communication.title}" se guardó como plantilla.`
+      setCommunications((current) =>
+        current.map((item) =>
+          item.id === communication.id
+            ? {
+                ...item,
+                status: "Enviada",
+                updated_at:
+                  new Date().toISOString(),
+              }
+            : item
+        )
       );
     } catch (err) {
       console.error(
-        "Error guardando plantilla:",
+        "Error updating communication status:",
         err
       );
 
       setError(
         err instanceof Error
           ? err.message
-          : "No fue posible guardar la plantilla."
+          : "No fue posible cambiar el estado de la comunicación."
+      );
+    } finally {
+      setUpdatingId(null);
+    }
+  }
+
+  /*
+   * =========================================================
+   * GUARDAR COMO PLANTILLA
+   * =========================================================
+   */
+
+  async function handleSaveAsTemplate(
+    communication: Communication
+  ) {
+    const confirmed = window.confirm(
+      `¿Quieres guardar "${communication.title}" como plantilla?`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setSavingTemplateId(
+        communication.id
+      );
+
+      setError("");
+
+      const { error: templateError } =
+        await supabase
+          .from("communication_templates")
+          .insert({
+            name:
+              communication.title.trim(),
+
+            description:
+              communication.internal_name.trim(),
+
+            message:
+              communication.message || "",
+
+            content_html:
+              communication.content_html,
+
+            color_theme:
+              communication.color_theme,
+
+            typography:
+              communication.typography,
+
+            button_text:
+              communication.button_text,
+
+            button_url:
+              communication.button_url,
+          });
+
+      if (templateError) {
+        throw templateError;
+      }
+
+      window.alert(
+        "La comunicación se guardó como plantilla correctamente."
+      );
+    } catch (err) {
+      console.error(
+        "Error saving communication as template:",
+        err
+      );
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "No fue posible guardar la comunicación como plantilla."
       );
     } finally {
       setSavingTemplateId(null);
@@ -165,7 +262,8 @@ export default function CommunicationsPage() {
         style={{
           flex: 1,
           minWidth: 0,
-          padding: "30px 46px 60px",
+          padding:
+            "30px 46px 60px",
         }}
       >
         <div
@@ -174,13 +272,16 @@ export default function CommunicationsPage() {
             margin: "0 auto",
           }}
         >
-          {/* HEADER */}
+          {/* =================================================
+              HEADER
+              ================================================= */}
 
           <section
             style={{
               display: "flex",
               alignItems: "flex-end",
-              justifyContent: "space-between",
+              justifyContent:
+                "space-between",
               gap: "24px",
               marginBottom: "42px",
             }}
@@ -190,8 +291,10 @@ export default function CommunicationsPage() {
                 style={{
                   margin: 0,
                   fontSize: "0.72rem",
-                  letterSpacing: "0.2em",
-                  textTransform: "uppercase",
+                  letterSpacing:
+                    "0.2em",
+                  textTransform:
+                    "uppercase",
                   color:
                     "var(--color-accent)",
                 }}
@@ -201,10 +304,12 @@ export default function CommunicationsPage() {
 
               <h1
                 style={{
-                  margin: "8px 0 0",
+                  margin:
+                    "8px 0 0",
                   fontFamily:
                     "var(--font-display)",
-                  fontSize: "3.4rem",
+                  fontSize:
+                    "3.4rem",
                   fontWeight: 500,
                   lineHeight: 1.05,
                   color:
@@ -216,15 +321,17 @@ export default function CommunicationsPage() {
 
               <p
                 style={{
-                  margin: "12px 0 0",
+                  margin:
+                    "12px 0 0",
                   fontSize: "1rem",
                   lineHeight: 1.6,
                   color:
                     "var(--color-text-secondary)",
                 }}
               >
-                Crea y gestiona los mensajes
-                que compartirás con tus
+                Crea y gestiona los
+                mensajes que
+                compartirás con tus
                 invitados.
               </p>
             </div>
@@ -232,87 +339,123 @@ export default function CommunicationsPage() {
             <Link
               href="/dashboard/communications/new"
               style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                borderRadius: "999px",
-                padding: "14px 25px",
+                display:
+                  "inline-flex",
+                alignItems:
+                  "center",
+                justifyContent:
+                  "center",
+                borderRadius:
+                  "999px",
+                padding:
+                  "14px 25px",
                 background:
                   "var(--color-primary)",
                 color: "#FFFFFF",
-                fontSize: "0.95rem",
+                fontSize:
+                  "0.95rem",
                 fontWeight: 500,
-                whiteSpace: "nowrap",
+                whiteSpace:
+                  "nowrap",
+                textDecoration:
+                  "none",
               }}
             >
               + Nueva comunicación
             </Link>
           </section>
 
-          {/* ERROR */}
+          {/* =================================================
+              ERROR
+              ================================================= */}
 
           {error && (
             <section
               style={{
-                marginBottom: "22px",
-                padding: "16px 18px",
-                borderRadius: "16px",
-                background: "#FBF4F1",
+                marginBottom:
+                  "22px",
+                padding:
+                  "16px 18px",
+                borderRadius:
+                  "16px",
+                background:
+                  "#FBF4F1",
                 border:
                   "1px solid #E8D8D1",
-                color: "#765F56",
-                fontSize: "0.9rem",
+                color:
+                  "#765F56",
+                fontSize:
+                  "0.9rem",
               }}
             >
               {error}
             </section>
           )}
 
-          {/* LOADING */}
+          {/* =================================================
+              LOADING
+              ================================================= */}
 
           {loading ? (
             <section
               style={{
-                minHeight: "300px",
+                minHeight:
+                  "300px",
                 background:
                   "var(--color-surface)",
                 border:
                   "1px solid var(--color-border)",
-                borderRadius: "30px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                textAlign: "center",
+                borderRadius:
+                  "30px",
+                display:
+                  "flex",
+                alignItems:
+                  "center",
+                justifyContent:
+                  "center",
+                textAlign:
+                  "center",
               }}
             >
               <p
                 style={{
                   margin: 0,
-                  fontSize: "0.95rem",
+                  fontSize:
+                    "0.95rem",
                   color:
                     "var(--color-text-secondary)",
                 }}
               >
-                Cargando comunicaciones...
+                Cargando
+                comunicaciones...
               </p>
             </section>
           ) : communications.length ===
             0 ? (
-            /* EMPTY STATE */
+            /* =================================================
+               EMPTY STATE
+               ================================================= */
 
             <section
               style={{
-                minHeight: "430px",
+                minHeight:
+                  "430px",
                 background:
                   "var(--color-surface)",
                 border:
                   "1px solid var(--color-border)",
-                borderRadius: "30px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                textAlign: "center",
-                padding: "60px 30px",
+                borderRadius:
+                  "30px",
+                display:
+                  "flex",
+                alignItems:
+                  "center",
+                justifyContent:
+                  "center",
+                textAlign:
+                  "center",
+                padding:
+                  "60px 30px",
               }}
             >
               <div>
@@ -322,13 +465,18 @@ export default function CommunicationsPage() {
                     height: "76px",
                     margin:
                       "0 auto 28px",
-                    borderRadius: "50%",
-                    background: "#F7F3EB",
+                    borderRadius:
+                      "50%",
+                    background:
+                      "#F7F3EB",
                     border:
                       "1px solid #EEE7DA",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
+                    display:
+                      "flex",
+                    alignItems:
+                      "center",
+                    justifyContent:
+                      "center",
                   }}
                 >
                   <svg
@@ -357,7 +505,8 @@ export default function CommunicationsPage() {
                     margin: 0,
                     fontFamily:
                       "var(--font-display)",
-                    fontSize: "2.15rem",
+                    fontSize:
+                      "2.15rem",
                     fontWeight: 500,
                     lineHeight: 1.1,
                     color:
@@ -370,19 +519,23 @@ export default function CommunicationsPage() {
 
                 <p
                   style={{
-                    maxWidth: "480px",
+                    maxWidth:
+                      "480px",
                     margin:
                       "14px auto 30px",
-                    fontSize: "1rem",
+                    fontSize:
+                      "1rem",
                     lineHeight: 1.7,
                     color:
                       "var(--color-text-secondary)",
                   }}
                 >
                   Cuando crees una
-                  comunicación, aparecerá
-                  aquí para que puedas
-                  consultarla y gestionarla.
+                  comunicación,
+                  aparecerá aquí
+                  para que puedas
+                  consultarla y
+                  gestionarla.
                 </p>
 
                 <Link
@@ -407,6 +560,8 @@ export default function CommunicationsPage() {
                     fontSize:
                       "0.95rem",
                     fontWeight: 500,
+                    textDecoration:
+                      "none",
                   }}
                 >
                   Crear comunicación
@@ -414,7 +569,9 @@ export default function CommunicationsPage() {
               </div>
             </section>
           ) : (
-            /* COMMUNICATION LIST */
+            /* =================================================
+               COMMUNICATION LIST
+               ================================================= */
 
             <section
               style={{
@@ -422,8 +579,10 @@ export default function CommunicationsPage() {
                   "var(--color-surface)",
                 border:
                   "1px solid var(--color-border)",
-                borderRadius: "30px",
-                overflow: "hidden",
+                borderRadius:
+                  "30px",
+                overflow:
+                  "hidden",
               }}
             >
               {communications.map(
@@ -435,6 +594,10 @@ export default function CommunicationsPage() {
                     communication.status ===
                     "Enviada";
 
+                  const isUpdating =
+                    updatingId ===
+                    communication.id;
+
                   const isSavingTemplate =
                     savingTemplateId ===
                     communication.id;
@@ -445,9 +608,10 @@ export default function CommunicationsPage() {
                         communication.id
                       }
                       style={{
-                        display: "grid",
+                        display:
+                          "grid",
                         gridTemplateColumns:
-                          "1.5fr 1fr 150px 110px 270px",
+                          "1.5fr 1fr 180px 120px 300px",
                         alignItems:
                           "center",
                         gap: "20px",
@@ -461,7 +625,9 @@ export default function CommunicationsPage() {
                             : "1px solid var(--color-border)",
                       }}
                     >
-                      {/* TITLE */}
+                      {/* =================================================
+                          TITLE
+                          ================================================= */}
 
                       <div
                         style={{
@@ -506,7 +672,9 @@ export default function CommunicationsPage() {
                         </p>
                       </div>
 
-                      {/* ESSENCE */}
+                      {/* =================================================
+                          ESSENCE
+                          ================================================= */}
 
                       <div>
                         <p
@@ -547,7 +715,9 @@ export default function CommunicationsPage() {
                         </p>
                       </div>
 
-                      {/* DATE */}
+                      {/* =================================================
+                          DATE
+                          ================================================= */}
 
                       <div>
                         <p
@@ -565,7 +735,9 @@ export default function CommunicationsPage() {
                         </p>
                       </div>
 
-                      {/* STATUS */}
+                      {/* =================================================
+                          STATUS
+                          ================================================= */}
 
                       <div>
                         <span
@@ -588,7 +760,8 @@ export default function CommunicationsPage() {
                                 : "var(--color-accent)",
                             fontSize:
                               "0.8rem",
-                            fontWeight: 500,
+                            fontWeight:
+                              500,
                           }}
                         >
                           {
@@ -597,30 +770,52 @@ export default function CommunicationsPage() {
                         </span>
                       </div>
 
-                      {/* ACTIONS */}
+                      {/* =================================================
+                          ACTIONS
+                          ================================================= */}
 
                       <div
                         style={{
-                          display: "flex",
+                          display:
+                            "flex",
+                          flexDirection:
+                            "column",
                           alignItems:
-                            "center",
+                            "stretch",
                           justifyContent:
-                            "flex-end",
-                          gap: "18px",
-                          flexWrap:
-                            "wrap",
+                            "center",
+                          gap: "8px",
                         }}
                       >
+                        {/* VER */}
+
                         <Link
                           href={`/dashboard/communications/${communication.id}`}
                           style={{
+                            display:
+                              "inline-flex",
+                            alignItems:
+                              "center",
+                            justifyContent:
+                              "center",
+                            minHeight:
+                              "38px",
+                            padding:
+                              "0 16px",
+                            border:
+                              "1px solid var(--color-border)",
+                            borderRadius:
+                              "999px",
+                            background:
+                              "#FFFFFF",
                             color:
                               "var(--color-accent)",
                             textDecoration:
                               "none",
                             fontSize:
-                              "0.9rem",
-                            fontWeight: 500,
+                              "0.84rem",
+                            fontWeight:
+                              500,
                             whiteSpace:
                               "nowrap",
                           }}
@@ -628,10 +823,12 @@ export default function CommunicationsPage() {
                           Ver comunicación →
                         </Link>
 
+                        {/* GUARDAR COMO PLANTILLA */}
+
                         <button
                           type="button"
                           onClick={() =>
-                            saveAsTemplate(
+                            handleSaveAsTemplate(
                               communication
                             )
                           }
@@ -639,35 +836,86 @@ export default function CommunicationsPage() {
                             isSavingTemplate
                           }
                           style={{
+                            width:
+                              "100%",
+                            minHeight:
+                              "38px",
                             border:
                               "1px solid var(--color-border)",
                             borderRadius:
                               "999px",
-                            padding:
-                              "9px 14px",
                             background:
-                              "#FFFFFF",
+                              isSavingTemplate
+                                ? "#F3F0EA"
+                                : "#FFFFFF",
                             color:
                               "var(--color-accent)",
                             fontSize:
-                              "0.82rem",
-                            fontWeight: 500,
+                              "0.84rem",
+                            fontWeight:
+                              500,
                             cursor:
                               isSavingTemplate
                                 ? "default"
                                 : "pointer",
                             opacity:
                               isSavingTemplate
-                                ? 0.6
+                                ? 0.7
                                 : 1,
-                            whiteSpace:
-                              "nowrap",
                           }}
                         >
                           {isSavingTemplate
-                            ? "Guardando..."
+                            ? "Guardando plantilla..."
                             : "Guardar como plantilla"}
                         </button>
+
+                        {/* MARCAR COMO ENVIADA */}
+
+                        {!isSent && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleMarkAsSent(
+                                communication
+                              )
+                            }
+                            disabled={
+                              isUpdating
+                            }
+                            style={{
+                              width:
+                                "100%",
+                              minHeight:
+                                "38px",
+                              border:
+                                "1px solid var(--color-primary)",
+                              borderRadius:
+                                "999px",
+                              background:
+                                isUpdating
+                                  ? "#F3F0EA"
+                                  : "transparent",
+                              color:
+                                "var(--color-accent)",
+                              fontSize:
+                                "0.84rem",
+                              fontWeight:
+                                500,
+                              cursor:
+                                isUpdating
+                                  ? "default"
+                                  : "pointer",
+                              opacity:
+                                isUpdating
+                                  ? 0.65
+                                  : 1,
+                            }}
+                          >
+                            {isUpdating
+                              ? "Guardando..."
+                              : "Marcar como enviada"}
+                          </button>
+                        )}
                       </div>
                     </div>
                   );
@@ -681,7 +929,9 @@ export default function CommunicationsPage() {
   );
 }
 
-function formatDate(date: string) {
+function formatDate(
+  date: string
+) {
   return new Intl.DateTimeFormat(
     "es-CO",
     {
