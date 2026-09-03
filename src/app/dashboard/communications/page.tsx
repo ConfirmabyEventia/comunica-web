@@ -6,6 +6,11 @@ import { useEffect, useState } from "react";
 import Sidebar from "@/components/studio/Sidebar";
 import { supabase } from "@/lib/supabase/client";
 
+type WeddingPlanner = {
+  wp_id: string;
+  name: string;
+};
+
 type Communication = {
   id: string;
   internal_name: string;
@@ -19,6 +24,7 @@ type Communication = {
   typography: string | null;
   created_at: string;
   updated_at: string;
+  wp_id: string | null;
 };
 
 const colorNames: Record<string, string> = {
@@ -50,6 +56,15 @@ export default function CommunicationsPage() {
   const [savingTemplateId, setSavingTemplateId] =
     useState<string | null>(null);
 
+  const [weddingPlanners, setWeddingPlanners] =
+    useState<WeddingPlanner[]>([]);
+
+  const [loadingWeddingPlanners, setLoadingWeddingPlanners] =
+    useState(false);
+
+  const [savingWpId, setSavingWpId] =
+    useState<string | null>(null);
+
   async function loadCommunications() {
     try {
       setLoading(true);
@@ -71,7 +86,8 @@ export default function CommunicationsPage() {
               color_theme,
               typography,
               created_at,
-              updated_at
+              updated_at,
+              wp_id
             `
           )
           .order("created_at", {
@@ -104,6 +120,92 @@ export default function CommunicationsPage() {
   useEffect(() => {
     loadCommunications();
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadWeddingPlanners() {
+      try {
+        setLoadingWeddingPlanners(true);
+
+        const response = await fetch("/api/wedding-planners", {
+          method: "GET",
+          cache: "no-store",
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            result?.error ||
+              "No fue posible cargar los Wedding Planners."
+          );
+        }
+
+        if (!cancelled) {
+          setWeddingPlanners(result?.weddingPlanners || []);
+        }
+      } catch (err) {
+        console.error("Error cargando Wedding Planners:", err);
+      } finally {
+        if (!cancelled) {
+          setLoadingWeddingPlanners(false);
+        }
+      }
+    }
+
+    loadWeddingPlanners();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function handleAssignWeddingPlanner(
+    communication: Communication,
+    nextWpId: string
+  ) {
+    if (!nextWpId) return;
+
+    try {
+      setSavingWpId(communication.id);
+      setError("");
+
+      const { error: updateError } = await supabase
+        .from("communications")
+        .update({
+          wp_id: nextWpId.trim().toUpperCase(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", communication.id);
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      setCommunications((current) =>
+        current.map((item) =>
+          item.id === communication.id
+            ? {
+                ...item,
+                wp_id: nextWpId.trim().toUpperCase(),
+                updated_at: new Date().toISOString(),
+              }
+            : item
+        )
+      );
+    } catch (err) {
+      console.error("Error asignando Wedding Planner:", err);
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "No fue posible asignar el Wedding Planner."
+      );
+    } finally {
+      setSavingWpId(null);
+    }
+  }
 
   /*
    * =========================================================
@@ -396,6 +498,40 @@ export default function CommunicationsPage() {
               LOADING
               ================================================= */}
 
+          {!loading && communications.some((communication) => !communication.wp_id) && (
+            <section
+              style={{
+                marginBottom: "22px",
+                padding: "18px 20px",
+                borderRadius: "20px",
+                background: "#FBF6F7",
+                border: "1px solid #E7DDE0",
+              }}
+            >
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: "0.74rem",
+                  letterSpacing: "0.12em",
+                  textTransform: "uppercase",
+                  color: "var(--color-accent)",
+                }}
+              >
+                Pendiente de asignación
+              </p>
+              <p
+                style={{
+                  margin: "6px 0 0",
+                  fontSize: "0.92rem",
+                  lineHeight: 1.5,
+                  color: "var(--color-text-secondary)",
+                }}
+              >
+                Hay {communications.filter((communication) => !communication.wp_id).length} {communications.filter((communication) => !communication.wp_id).length === 1 ? "comunicación antigua" : "comunicaciones antiguas"} sin Wedding Planner. Puedes asignarlas directamente desde cada fila.
+              </p>
+            </section>
+          )}
+
           {loading ? (
             <section
               style={{
@@ -611,7 +747,7 @@ export default function CommunicationsPage() {
                         display:
                           "grid",
                         gridTemplateColumns:
-                          "1.5fr 1fr 180px 120px 300px",
+                          "1.35fr 1fr 180px 120px 220px 300px",
                         alignItems:
                           "center",
                         gap: "20px",
@@ -713,6 +849,75 @@ export default function CommunicationsPage() {
                               communication.typography
                             : "Sin tipografía"}
                         </p>
+                      </div>
+
+                      {/* =================================================
+                          WEDDING PLANNER
+                          ================================================= */}
+
+                      <div>
+                        <p
+                          style={{
+                            margin: "0 0 7px",
+                            fontSize: "0.68rem",
+                            letterSpacing: "0.08em",
+                            textTransform: "uppercase",
+                            color: "var(--color-text-muted)",
+                          }}
+                        >
+                          Wedding Planner
+                        </p>
+
+                        <select
+                          value={communication.wp_id || ""}
+                          onChange={(event) =>
+                            handleAssignWeddingPlanner(
+                              communication,
+                              event.target.value
+                            )
+                          }
+                          disabled={
+                            loadingWeddingPlanners ||
+                            savingWpId === communication.id
+                          }
+                          style={{
+                            width: "100%",
+                            minHeight: "38px",
+                            padding: "0 12px",
+                            border: communication.wp_id
+                              ? "1px solid var(--color-border)"
+                              : "1px solid #D9BFC5",
+                            borderRadius: "12px",
+                            background: communication.wp_id
+                              ? "#FFFFFF"
+                              : "#FBF6F7",
+                            color: communication.wp_id
+                              ? "var(--color-text)"
+                              : "var(--color-accent)",
+                            fontSize: "0.78rem",
+                            outline: "none",
+                            cursor:
+                              loadingWeddingPlanners ||
+                              savingWpId === communication.id
+                                ? "default"
+                                : "pointer",
+                          }}
+                        >
+                          <option value="">
+                            {loadingWeddingPlanners
+                              ? "Cargando..."
+                              : "Asignar WP"}
+                          </option>
+
+                          {weddingPlanners.map((planner) => (
+                            <option
+                              key={planner.wp_id}
+                              value={planner.wp_id}
+                            >
+                              {planner.name} — {planner.wp_id}
+                            </option>
+                          ))}
+                        </select>
                       </div>
 
                       {/* =================================================

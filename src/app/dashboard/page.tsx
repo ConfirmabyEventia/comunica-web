@@ -97,6 +97,10 @@ export default function DashboardPage() {
   const recentCommunications =
     communications.slice(0, 5);
 
+  const monthlyCommunicationData = buildMonthlyCommunicationData(
+    communications
+  );
+
   return (
     <div
       style={{
@@ -280,6 +284,72 @@ export default function DashboardPage() {
             </div>
           </section>
 
+          {/* COMMUNICATION ACTIVITY */}
+          <section
+            style={{
+              marginBottom: "48px",
+            }}
+          >
+            <div style={{ marginBottom: "20px" }}>
+              <h2
+                style={{
+                  margin: 0,
+                  fontFamily: "var(--font-display)",
+                  fontSize: "2.35rem",
+                  fontWeight: 500,
+                  lineHeight: 1.1,
+                  color: "var(--color-text)",
+                }}
+              >
+                Actividad de comunicaciones
+              </h2>
+
+              <p
+                style={{
+                  margin: "8px 0 0",
+                  fontSize: "1rem",
+                  color: "var(--color-text-secondary)",
+                }}
+              >
+                Evolución de las comunicaciones creadas a lo largo del tiempo.
+              </p>
+            </div>
+
+            <div
+              style={{
+                background: "var(--color-surface)",
+                border: "1px solid var(--color-border)",
+                borderRadius: "24px",
+                padding: "28px 30px 24px",
+                overflowX: "auto",
+              }}
+            >
+              {monthlyCommunicationData.length === 0 ? (
+                <div
+                  style={{
+                    minHeight: "260px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    textAlign: "center",
+                  }}
+                >
+                  <p
+                    style={{
+                      margin: 0,
+                      color: "var(--color-text-secondary)",
+                      fontSize: "0.95rem",
+                    }}
+                  >
+                    El gráfico aparecerá cuando tengas comunicaciones creadas.
+                  </p>
+                </div>
+              ) : (
+                <CommunicationLineChart data={monthlyCommunicationData} />
+              )}
+            </div>
+          </section>
+
           {/* RECENT ACTIVITY */}
 
           <section
@@ -457,6 +527,184 @@ export default function DashboardPage() {
       </main>
     </div>
   );
+}
+
+function CommunicationLineChart({
+  data,
+}: {
+  data: {
+    key: string;
+    label: string;
+    value: number;
+  }[];
+}) {
+  const width = 900;
+  const height = 280;
+  const padding = {
+    top: 18,
+    right: 18,
+    bottom: 42,
+    left: 44,
+  };
+
+  const plotWidth =
+    width - padding.left - padding.right;
+  const plotHeight =
+    height - padding.top - padding.bottom;
+
+  const maxValue = Math.max(
+    1,
+    ...data.map((item) => item.value)
+  );
+
+  const ticks = [
+    maxValue,
+    Math.round(maxValue / 2),
+    0,
+  ];
+
+  const points = data.map((item, index) => {
+    const x =
+      padding.left +
+      (index / Math.max(1, data.length - 1)) *
+        plotWidth;
+
+    const y =
+      padding.top +
+      plotHeight -
+      (item.value / maxValue) * plotHeight;
+
+    return { ...item, x, y };
+  });
+
+  const pathData = points
+    .map(
+      (point, index) =>
+        `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`
+    )
+    .join(" ");
+
+  return (
+    <div style={{ width: "100%", minWidth: "720px" }}>
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        width="100%"
+        height="280"
+        role="img"
+        aria-label="Evolución mensual de las comunicaciones creadas"
+        style={{ display: "block" }}
+      >
+        {ticks.map((tick, index) => {
+          const y =
+            padding.top +
+            (index / (ticks.length - 1)) *
+              plotHeight;
+
+          return (
+            <g key={`${tick}-${index}`}>
+              <line
+                x1={padding.left}
+                x2={width - padding.right}
+                y1={y}
+                y2={y}
+                stroke="var(--color-border)"
+                strokeWidth="1"
+              />
+              <text
+                x={padding.left - 12}
+                y={y + 4}
+                textAnchor="end"
+                fontSize="12"
+                fill="var(--color-text-muted)"
+              >
+                {tick}
+              </text>
+            </g>
+          );
+        })}
+
+        <path
+          d={pathData}
+          fill="none"
+          stroke="var(--color-primary)"
+          strokeWidth="3"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+
+        {points.map((point) => (
+          <g key={point.key}>
+            <circle
+              cx={point.x}
+              cy={point.y}
+              r="5"
+              fill="var(--color-primary)"
+              stroke="var(--color-surface)"
+              strokeWidth="3"
+            />
+            <text
+              x={point.x}
+              y={height - 14}
+              textAnchor="middle"
+              fontSize="12"
+              fill="var(--color-text-secondary)"
+            >
+              {point.label}
+            </text>
+          </g>
+        ))}
+      </svg>
+    </div>
+  );
+}
+
+function buildMonthlyCommunicationData(
+  communications: Communication[]
+) {
+  const now = new Date();
+  const months: {
+    key: string;
+    label: string;
+    value: number;
+  }[] = [];
+
+  for (let offset = 5; offset >= 0; offset -= 1) {
+    const date = new Date(
+      now.getFullYear(),
+      now.getMonth() - offset,
+      1
+    );
+
+    const key = `${date.getFullYear()}-${String(
+      date.getMonth() + 1
+    ).padStart(2, "0")}`;
+
+    const label = new Intl.DateTimeFormat("es-CO", {
+      month: "short",
+    })
+      .format(date)
+      .replace(".", "")
+      .replace(/\\b\\w/g, (letter) =>
+        letter.toUpperCase()
+      );
+
+    const value = communications.filter((communication) => {
+      const communicationDate = new Date(
+        communication.created_at
+      );
+
+      return (
+        communicationDate.getFullYear() ===
+          date.getFullYear() &&
+        communicationDate.getMonth() ===
+          date.getMonth()
+      );
+    }).length;
+
+    months.push({ key, label, value });
+  }
+
+  return months;
 }
 
 /* =========================================================
