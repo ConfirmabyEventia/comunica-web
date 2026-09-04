@@ -56,6 +56,9 @@ export default function CommunicationsPage() {
   const [savingTemplateId, setSavingTemplateId] =
     useState<string | null>(null);
 
+  const [deletingId, setDeletingId] =
+    useState<string | null>(null);
+
   const [weddingPlanners, setWeddingPlanners] =
     useState<WeddingPlanner[]>([]);
 
@@ -270,6 +273,53 @@ export default function CommunicationsPage() {
       );
     } finally {
       setUpdatingId(null);
+    }
+  }
+
+  /*
+   * =========================================================
+   * ELIMINAR BORRADOR
+   * =========================================================
+   */
+
+  async function handleDeleteDraft(
+    communication: Communication
+  ) {
+    const confirmed = window.confirm(
+      `¿Quieres eliminar el borrador "${communication.title}"? Esta acción no se puede deshacer.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setDeletingId(communication.id);
+      setError("");
+
+      const { error: deleteError } = await supabase
+        .from("communications")
+        .delete()
+        .eq("id", communication.id)
+        .eq("status", "Borrador");
+
+      if (deleteError) {
+        throw deleteError;
+      }
+
+      setCommunications((current) =>
+        current.filter((item) => item.id !== communication.id)
+      );
+    } catch (err) {
+      console.error("Error eliminando borrador:", err);
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "No fue posible eliminar el borrador."
+      );
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -992,6 +1042,53 @@ export default function CommunicationsPage() {
                           gap: "8px",
                         }}
                       >
+                        {/* EDITAR Y ELIMINAR — SOLO BORRADORES */}
+
+                        {!isSent && (
+                          <>
+                            <Link
+                              href={`/dashboard/communications/new?communication=${communication.id}`}
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                minHeight: "38px",
+                                padding: "0 16px",
+                                border: "1px solid var(--color-primary)",
+                                borderRadius: "999px",
+                                background: "var(--color-primary)",
+                                color: "#FFFFFF",
+                                textDecoration: "none",
+                                fontSize: "0.84rem",
+                                fontWeight: 500,
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              Editar
+                            </Link>
+
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteDraft(communication)}
+                              disabled={deletingId === communication.id}
+                              style={{
+                                width: "100%",
+                                minHeight: "38px",
+                                border: "1px solid #E5D2D2",
+                                borderRadius: "999px",
+                                background: deletingId === communication.id ? "#F3F0EA" : "#FFFFFF",
+                                color: "#8A5A5A",
+                                fontSize: "0.84rem",
+                                fontWeight: 500,
+                                cursor: deletingId === communication.id ? "default" : "pointer",
+                                opacity: deletingId === communication.id ? 0.7 : 1,
+                              }}
+                            >
+                              {deletingId === communication.id ? "Eliminando..." : "Eliminar"}
+                            </button>
+                          </>
+                        )}
+
                         {/* VER */}
 
                         <Link
