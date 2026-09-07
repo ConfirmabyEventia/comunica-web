@@ -38,6 +38,20 @@ type Communication = {
   color_theme: string | null;
   typography: string | null;
   wp_id: string | null;
+  celebration_id: string | null;
+};
+
+type Celebration = {
+  id: string;
+  name: string;
+  event_date: string;
+  celebration_code: string | null;
+  wp_id: string | null;
+};
+
+type WeddingPlanner = {
+  wp_id: string;
+  name: string;
 };
 
 type ColorTheme = {
@@ -207,6 +221,11 @@ const [messageSize, setMessageSize] = useState("normal");
   const [applyingTemplateId, setApplyingTemplateId] = useState<string | null>(null);
 
   const [wpId, setWpId] = useState("");
+  const [weddingPlanners, setWeddingPlanners] = useState<WeddingPlanner[]>([]);
+  const [loadingWeddingPlanners, setLoadingWeddingPlanners] = useState(false);
+  const [celebrations, setCelebrations] = useState<Celebration[]>([]);
+  const [selectedCelebrationId, setSelectedCelebrationId] = useState("");
+  const [loadingCelebrations, setLoadingCelebrations] = useState(false);
   const [createdId, setCreatedId] =
     useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -606,6 +625,104 @@ const textSizes = [
   }, [searchParams, templates]);
 
   useEffect(() => {
+    let cancelled = false;
+
+    async function loadWeddingPlanners() {
+      try {
+        setLoadingWeddingPlanners(true);
+
+        const response = await fetch("/api/wedding-planners", {
+          method: "GET",
+          cache: "no-store",
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            result?.error ||
+              "No fue posible cargar los Wedding Planners."
+          );
+        }
+
+        if (!cancelled) {
+          setWeddingPlanners(
+            (result?.weddingPlanners || []) as WeddingPlanner[]
+          );
+        }
+      } catch (err) {
+        console.error("Error cargando Wedding Planners:", err);
+
+        if (!cancelled) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : "No fue posible cargar los Wedding Planners."
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingWeddingPlanners(false);
+        }
+      }
+    }
+
+    loadWeddingPlanners();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadCelebrations() {
+      try {
+        setLoadingCelebrations(true);
+
+        const response = await fetch("/api/confirma/celebrations", {
+          method: "GET",
+          cache: "no-store",
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            result?.error ||
+              "No fue posible cargar las celebraciones de CONFIRMA."
+          );
+        }
+
+        if (!cancelled) {
+          setCelebrations((result?.celebrations || []) as Celebration[]);
+        }
+      } catch (err) {
+        console.error("Error cargando celebraciones de CONFIRMA:", err);
+
+        if (!cancelled) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : "No fue posible cargar las celebraciones de CONFIRMA."
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingCelebrations(false);
+        }
+      }
+    }
+
+    loadCelebrations();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     const communicationId = searchParams.get("communication");
 
     if (!communicationId) {
@@ -635,7 +752,8 @@ const textSizes = [
               status,
               color_theme,
               typography,
-              wp_id
+              wp_id,
+              celebration_id
             `
           )
           .eq("id", communicationId)
@@ -659,6 +777,7 @@ const textSizes = [
         setEditingTemplateId(null);
         setInternalName(communication.internal_name || "");
         setWpId(communication.wp_id || "");
+        setSelectedCelebrationId(communication.celebration_id || "");
         setTitle(communication.title || "");
         setSelectedColor(
           colorThemes.some((theme) => theme.id === communication.color_theme)
@@ -722,12 +841,12 @@ const textSizes = [
       !internalName.trim() ||
       !title.trim() ||
       !plainText ||
-      (!editingTemplateId && !editingCommunicationId && !wpId.trim())
+      (!editingTemplateId && !wpId.trim())
     ) {
       setError(
-        editingTemplateId || editingCommunicationId
+        editingTemplateId
           ? "Completa el nombre interno, el título y el mensaje."
-          : "Completa el WP ID, el nombre interno, el título y el mensaje."
+          : "Selecciona un Wedding Planner y completa el nombre interno, el título y el mensaje."
       );
       return;
     }
@@ -744,6 +863,7 @@ const textSizes = [
           .update({
             internal_name: internalName.trim(),
             wp_id: wpId.trim().toUpperCase(),
+            celebration_id: selectedCelebrationId || null,
             title: title.trim(),
             message: plainText,
             content_html: currentHtml,
@@ -794,6 +914,8 @@ const textSizes = [
               internalName.trim(),
 
             wp_id: wpId.trim().toUpperCase(),
+
+            celebration_id: selectedCelebrationId || null,
 
             title: title.trim(),
 
@@ -967,7 +1089,7 @@ const textSizes = [
                 ? "Modifica tu comunicación y guarda los cambios antes de enviarla."
                 : editingTemplateId
                   ? "Modifica el contenido de tu plantilla y guarda los cambios."
-                  : "Crea el mensaje, asígnalo a un Wedding Planner y genera el enlace público para SendPulse."}
+                  : "Crea el mensaje, asígnalo a un Wedding Planner y, si corresponde, a una celebración de CONFIRMA para generar el enlace público para SendPulse."}
             </p>
           </section>
 
@@ -1361,7 +1483,7 @@ const textSizes = [
     })}
   </div>
 </div>
-              {/* WEDDING PLANNER */}
+              {/* WEDDING PLANNER + CELEBRACIÓN */}
 
               <div
                 style={{
@@ -1394,20 +1516,127 @@ const textSizes = [
                   Asigna esta comunicación al Wedding Planner usando el WP ID creado en WP STUDIO.
                 </p>
 
-                <input
+                <select
                   value={wpId}
-                  onChange={(e) =>
-                    setWpId(e.target.value.toUpperCase())
-                  }
-                  placeholder="Ej. WP-0001"
+                  onChange={(e) => {
+                    const nextWpId = e.target.value.toUpperCase();
+                    setWpId(nextWpId);
+
+                    if (selectedCelebrationId) {
+                      const selected = celebrations.find(
+                        (celebration) => celebration.id === selectedCelebrationId
+                      );
+
+                      if (selected?.wp_id && selected.wp_id.toUpperCase() !== nextWpId) {
+                        setSelectedCelebrationId("");
+                      }
+                    }
+                  }}
+                  disabled={!!createdId || loadingWeddingPlanners}
+                  style={{
+                    ...inputStyle,
+                    marginBottom: "12px",
+                    background: "#FFFFFF",
+                  }}
+                >
+                  <option value="">
+                    {loadingWeddingPlanners
+                      ? "Cargando Wedding Planners..."
+                      : "Selecciona un Wedding Planner"}
+                  </option>
+
+                  {weddingPlanners.map((planner) => (
+                    <option key={planner.wp_id} value={planner.wp_id}>
+                      {planner.name} — {planner.wp_id}
+                    </option>
+                  ))}
+                </select>
+
+                <p
+                  style={{
+                    margin: "0 0 14px",
+                    fontSize: "0.74rem",
+                    lineHeight: 1.45,
+                    color: "var(--color-text-muted)",
+                  }}
+                >
+                  Si llegaste desde WP STUDIO, el Wedding Planner puede venir precargado.
+                </p>
+
+                <div
+                  style={{
+                    height: "1px",
+                    background: "var(--color-border)",
+                    margin: "4px 0 18px",
+                  }}
+                />
+
+                <div
+                  style={{
+                    fontSize: "0.76rem",
+                    letterSpacing: "0.08em",
+                    textTransform: "uppercase",
+                    color: "var(--color-text-secondary)",
+                  }}
+                >
+                  Celebración
+                </div>
+
+                <p
+                  style={{
+                    margin: "7px 0 14px",
+                    fontSize: "0.9rem",
+                    lineHeight: 1.5,
+                    color: "var(--color-text-secondary)",
+                  }}
+                >
+                  Si esta comunicación pertenece a una boda de CONFIRMA, selecciónala aquí. Si no, déjala como “No vinculada a CONFIRMA / Otro evento”.
+                </p>
+
+                <select
+                  value={selectedCelebrationId}
+                  onChange={(e) => {
+                    const nextCelebrationId = e.target.value;
+                    setSelectedCelebrationId(nextCelebrationId);
+
+                    const selected = celebrations.find(
+                      (celebration) => celebration.id === nextCelebrationId
+                    );
+
+                    if (selected?.wp_id) {
+                      setWpId(selected.wp_id.toUpperCase());
+                    }
+                  }}
+                  disabled={!!createdId || loadingCelebrations}
                   style={{
                     ...inputStyle,
                     marginBottom: 0,
                     background: "#FFFFFF",
-                    textTransform: "uppercase",
                   }}
-                  disabled={!!createdId}
-                />
+                >
+                  <option value="">
+                    {loadingCelebrations
+                      ? "Cargando celebraciones..."
+                      : "No vinculada a CONFIRMA / Otro evento"}
+                  </option>
+
+                  {celebrations
+                    .filter(
+                      (celebration) =>
+                        !wpId.trim() ||
+                        !celebration.wp_id ||
+                        celebration.wp_id.toUpperCase() ===
+                          wpId.trim().toUpperCase()
+                    )
+                    .map((celebration) => (
+                      <option key={celebration.id} value={celebration.id}>
+                        {celebration.name}
+                        {celebration.event_date
+                          ? ` · ${celebration.event_date}`
+                          : ""}
+                      </option>
+                    ))}
+                </select>
 
                 <p
                   style={{
@@ -1417,7 +1646,7 @@ const textSizes = [
                     color: "var(--color-text-muted)",
                   }}
                 >
-                  Si llegaste desde WP STUDIO, este campo puede venir precargado.
+                  Esta asociación permitirá que el reporte final de cada celebración muestre únicamente sus comunicaciones vinculadas a esa boda.
                 </p>
               </div>
 

@@ -11,6 +11,15 @@ type WeddingPlanner = {
   name: string;
 };
 
+type Celebration = {
+  id: string;
+  celebration_code: string | null;
+  name: string;
+  event_date: string;
+  status: string;
+  guest_count: number;
+};
+
 type Communication = {
   id: string;
   internal_name: string;
@@ -25,6 +34,7 @@ type Communication = {
   created_at: string;
   updated_at: string;
   wp_id: string | null;
+  celebration_id: string | null;
 };
 
 const colorNames: Record<string, string> = {
@@ -68,6 +78,15 @@ export default function CommunicationsPage() {
   const [savingWpId, setSavingWpId] =
     useState<string | null>(null);
 
+  const [celebrations, setCelebrations] =
+    useState<Celebration[]>([]);
+
+  const [loadingCelebrations, setLoadingCelebrations] =
+    useState(false);
+
+  const [savingCelebrationId, setSavingCelebrationId] =
+    useState<string | null>(null);
+
   async function loadCommunications() {
     try {
       setLoading(true);
@@ -90,7 +109,8 @@ export default function CommunicationsPage() {
               typography,
               created_at,
               updated_at,
-              wp_id
+              wp_id,
+              celebration_id
             `
           )
           .order("created_at", {
@@ -163,6 +183,92 @@ export default function CommunicationsPage() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadCelebrations() {
+      try {
+        setLoadingCelebrations(true);
+
+        const response = await fetch("/api/confirma/celebrations", {
+          method: "GET",
+          cache: "no-store",
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            result?.error ||
+              "No fue posible cargar las celebraciones de CONFIRMA."
+          );
+        }
+
+        if (!cancelled) {
+          setCelebrations((result?.celebrations || []) as Celebration[]);
+        }
+      } catch (err) {
+        console.error("Error cargando celebraciones de CONFIRMA:", err);
+      } finally {
+        if (!cancelled) {
+          setLoadingCelebrations(false);
+        }
+      }
+    }
+
+    loadCelebrations();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function handleAssignCelebration(
+    communication: Communication,
+    nextCelebrationId: string
+  ) {
+    try {
+      setSavingCelebrationId(communication.id);
+      setError("");
+
+      const { error: updateError } = await supabase
+        .from("communications")
+        .update({
+          celebration_id: nextCelebrationId || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", communication.id);
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      const updatedAt = new Date().toISOString();
+
+      setCommunications((current) =>
+        current.map((item) =>
+          item.id === communication.id
+            ? {
+                ...item,
+                celebration_id: nextCelebrationId || null,
+                updated_at: updatedAt,
+              }
+            : item
+        )
+      );
+    } catch (err) {
+      console.error("Error asignando celebración:", err);
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "No fue posible asignar la celebración."
+      );
+    } finally {
+      setSavingCelebrationId(null);
+    }
+  }
 
   async function handleAssignWeddingPlanner(
     communication: Communication,
@@ -548,7 +654,7 @@ export default function CommunicationsPage() {
               LOADING
               ================================================= */}
 
-          {!loading && communications.some((communication) => !communication.wp_id) && (
+          {!loading && communications.some((communication) => !communication.wp_id || !communication.celebration_id) && (
             <section
               style={{
                 marginBottom: "22px",
@@ -577,7 +683,7 @@ export default function CommunicationsPage() {
                   color: "var(--color-text-secondary)",
                 }}
               >
-                Hay {communications.filter((communication) => !communication.wp_id).length} {communications.filter((communication) => !communication.wp_id).length === 1 ? "comunicación antigua" : "comunicaciones antiguas"} sin Wedding Planner. Puedes asignarlas directamente desde cada fila.
+                Hay {communications.filter((communication) => !communication.wp_id || !communication.celebration_id).length} {communications.filter((communication) => !communication.wp_id || !communication.celebration_id).length === 1 ? "comunicación antigua" : "comunicaciones antiguas"} con información pendiente de asociación. Puedes asignar el Wedding Planner y/o la celebración directamente desde cada fila.
               </p>
             </section>
           )}
@@ -797,7 +903,7 @@ export default function CommunicationsPage() {
                         display:
                           "grid",
                         gridTemplateColumns:
-                          "1.35fr 1fr 180px 120px 220px 300px",
+                          "1.35fr 1fr 180px 250px 120px 120px 300px",
                         alignItems:
                           "center",
                         gap: "20px",
@@ -965,6 +1071,78 @@ export default function CommunicationsPage() {
                               value={planner.wp_id}
                             >
                               {planner.name} — {planner.wp_id}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* =================================================
+                          CELEBRACIÓN
+                          ================================================= */}
+
+                      <div>
+                        <p
+                          style={{
+                            margin: "0 0 7px",
+                            fontSize: "0.68rem",
+                            letterSpacing: "0.08em",
+                            textTransform: "uppercase",
+                            color: "var(--color-text-muted)",
+                          }}
+                        >
+                          Celebración
+                        </p>
+
+                        <select
+                          value={communication.celebration_id || ""}
+                          onChange={(event) =>
+                            handleAssignCelebration(
+                              communication,
+                              event.target.value
+                            )
+                          }
+                          disabled={
+                            loadingCelebrations ||
+                            savingCelebrationId === communication.id
+                          }
+                          style={{
+                            width: "100%",
+                            minHeight: "38px",
+                            padding: "0 10px",
+                            border: communication.celebration_id
+                              ? "1px solid var(--color-border)"
+                              : "1px solid #D9BFC5",
+                            borderRadius: "12px",
+                            background: communication.celebration_id
+                              ? "#FFFFFF"
+                              : "#FBF6F7",
+                            color: communication.celebration_id
+                              ? "var(--color-text)"
+                              : "var(--color-accent)",
+                            fontSize: "0.75rem",
+                            outline: "none",
+                            cursor:
+                              loadingCelebrations ||
+                              savingCelebrationId === communication.id
+                                ? "default"
+                                : "pointer",
+                          }}
+                        >
+                          <option value="">
+                            {loadingCelebrations
+                              ? "Cargando..."
+                              : "Sin asignar / Otro evento"}
+                          </option>
+
+                          {celebrations.map((celebration) => (
+                            <option
+                              key={celebration.id}
+                              value={celebration.id}
+                            >
+                              {celebration.name}
+                              {celebration.event_date
+                                ? ` · ${celebration.event_date}`
+                                : ""}
                             </option>
                           ))}
                         </select>
