@@ -903,12 +903,12 @@ export default function CommunicationsPage() {
                         display:
                           "grid",
                         gridTemplateColumns:
-                          "1.35fr 1fr 180px 250px 120px 120px 300px",
+                          "minmax(240px, 1.6fr) minmax(120px, 0.8fr) minmax(170px, 1.1fr) minmax(190px, 1.25fr) 110px 100px minmax(210px, 1.35fr)",
                         alignItems:
                           "center",
-                        gap: "20px",
+                        gap: "18px",
                         padding:
-                          "22px 26px",
+                          "24px 26px",
                         borderBottom:
                           index ===
                           communications.length -
