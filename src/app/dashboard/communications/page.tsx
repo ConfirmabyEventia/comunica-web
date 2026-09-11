@@ -873,8 +873,8 @@ export default function CommunicationsPage() {
                   "1px solid var(--color-border)",
                 borderRadius:
                   "30px",
-                overflow:
-                  "hidden",
+                overflowX: "auto",
+                overflowY: "hidden",
               }}
             >
               {communications.map(
@@ -903,7 +903,7 @@ export default function CommunicationsPage() {
                         display:
                           "grid",
                         gridTemplateColumns:
-                          "minmax(240px, 1.6fr) minmax(120px, 0.8fr) minmax(170px, 1.1fr) minmax(190px, 1.25fr) 110px 100px minmax(210px, 1.35fr)",
+                          "minmax(220px, 1.55fr) minmax(100px, 0.75fr) minmax(150px, 1fr) minmax(170px, 1.1fr) 105px 90px minmax(180px, 1.2fr)",
                         alignItems:
                           "center",
                         gap: "18px",
