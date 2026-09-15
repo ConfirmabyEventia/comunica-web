@@ -49,11 +49,6 @@ type Celebration = {
   wp_id: string | null;
 };
 
-type WeddingPlanner = {
-  wp_id: string;
-  name: string;
-};
-
 type ColorTheme = {
   id: string;
   name: string;
@@ -221,8 +216,6 @@ const [messageSize, setMessageSize] = useState("normal");
   const [applyingTemplateId, setApplyingTemplateId] = useState<string | null>(null);
 
   const [wpId, setWpId] = useState("");
-  const [weddingPlanners, setWeddingPlanners] = useState<WeddingPlanner[]>([]);
-  const [loadingWeddingPlanners, setLoadingWeddingPlanners] = useState(false);
   const [celebrations, setCelebrations] = useState<Celebration[]>([]);
   const [selectedCelebrationId, setSelectedCelebrationId] = useState("");
   const [loadingCelebrations, setLoadingCelebrations] = useState(false);
@@ -305,6 +298,81 @@ const textSizes = [
       .trim();
 
     setMessage(plainText);
+  }
+
+  function insertLink() {
+    const editor = editorRef.current;
+
+    if (!editor) return;
+
+    editor.focus();
+
+    const selection = window.getSelection();
+
+    if (savedRangeRef.current) {
+      selection?.removeAllRanges();
+      selection?.addRange(savedRangeRef.current);
+    }
+
+    if (!selection || selection.rangeCount === 0) {
+      setError("Selecciona primero el texto que quieres convertir en enlace.");
+      return;
+    }
+
+    const range = selection.getRangeAt(0);
+
+    if (
+      range.collapsed ||
+      !editor.contains(range.commonAncestorContainer)
+    ) {
+      setError("Selecciona primero el texto que quieres convertir en enlace.");
+      return;
+    }
+
+    const urlInput = window.prompt(
+      "Pega aquí la dirección de la página web:",
+      "https://"
+    );
+
+    if (!urlInput) return;
+
+    let url = urlInput.trim();
+
+    if (!url) return;
+
+    if (!/^https?:\/\//i.test(url)) {
+      url = `https://${url}`;
+    }
+
+    try {
+      const parsedUrl = new URL(url);
+
+      if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+        throw new Error("URL no válida");
+      }
+    } catch {
+      setError("Ingresa una dirección web válida, por ejemplo: https://www.ejemplo.com");
+      return;
+    }
+
+    editor.focus();
+
+    selection.removeAllRanges();
+    selection.addRange(range);
+
+    document.execCommand("createLink", false, url);
+
+    const links = editor.querySelectorAll("a");
+    const lastLink = links[links.length - 1];
+
+    if (lastLink) {
+      lastLink.target = "_blank";
+      lastLink.rel = "noopener noreferrer";
+    }
+
+    updateContent();
+    saveCurrentSelection();
+    setError("");
   }
 
   function executeCommand(
@@ -627,56 +695,6 @@ const textSizes = [
   useEffect(() => {
     let cancelled = false;
 
-    async function loadWeddingPlanners() {
-      try {
-        setLoadingWeddingPlanners(true);
-
-        const response = await fetch("/api/wedding-planners", {
-          method: "GET",
-          cache: "no-store",
-        });
-
-        const result = await response.json();
-
-        if (!response.ok) {
-          throw new Error(
-            result?.error ||
-              "No fue posible cargar los Wedding Planners."
-          );
-        }
-
-        if (!cancelled) {
-          setWeddingPlanners(
-            (result?.weddingPlanners || []) as WeddingPlanner[]
-          );
-        }
-      } catch (err) {
-        console.error("Error cargando Wedding Planners:", err);
-
-        if (!cancelled) {
-          setError(
-            err instanceof Error
-              ? err.message
-              : "No fue posible cargar los Wedding Planners."
-          );
-        }
-      } finally {
-        if (!cancelled) {
-          setLoadingWeddingPlanners(false);
-        }
-      }
-    }
-
-    loadWeddingPlanners();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-
     async function loadCelebrations() {
       try {
         setLoadingCelebrations(true);
@@ -841,12 +859,17 @@ const textSizes = [
       !internalName.trim() ||
       !title.trim() ||
       !plainText ||
-      (!editingTemplateId && !wpId.trim())
+      (!editingTemplateId && !editingCommunicationId && !wpId.trim()) ||
+      (!editingTemplateId && !selectedCelebrationId)
     ) {
       setError(
         editingTemplateId
           ? "Completa el nombre interno, el título y el mensaje."
-          : "Selecciona un Wedding Planner y completa el nombre interno, el título y el mensaje."
+          : !selectedCelebrationId
+            ? "Selecciona la celebración a la que pertenece esta comunicación."
+            : editingCommunicationId
+              ? "Completa el nombre interno, el título y el mensaje."
+              : "Completa el WP ID, el nombre interno, el título y el mensaje."
       );
       return;
     }
@@ -1089,7 +1112,7 @@ const textSizes = [
                 ? "Modifica tu comunicación y guarda los cambios antes de enviarla."
                 : editingTemplateId
                   ? "Modifica el contenido de tu plantilla y guarda los cambios."
-                  : "Crea el mensaje, asígnalo a un Wedding Planner y, si corresponde, a una celebración de CONFIRMA para generar el enlace público para SendPulse."}
+                  : "Crea el mensaje, asígnalo a un Wedding Planner y a una celebración para generar el enlace público para SendPulse."}
             </p>
           </section>
 
@@ -1516,7 +1539,7 @@ const textSizes = [
                   Asigna esta comunicación al Wedding Planner usando el WP ID creado en WP STUDIO.
                 </p>
 
-                <select
+                <input
                   value={wpId}
                   onChange={(e) => {
                     const nextWpId = e.target.value.toUpperCase();
@@ -1527,30 +1550,20 @@ const textSizes = [
                         (celebration) => celebration.id === selectedCelebrationId
                       );
 
-                      if (selected?.wp_id && selected.wp_id.toUpperCase() !== nextWpId) {
+                      if (selected?.wp_id !== nextWpId.trim()) {
                         setSelectedCelebrationId("");
                       }
                     }
                   }}
-                  disabled={!!createdId || loadingWeddingPlanners}
+                  placeholder="Ej. WP-0001"
                   style={{
                     ...inputStyle,
                     marginBottom: "12px",
                     background: "#FFFFFF",
+                    textTransform: "uppercase",
                   }}
-                >
-                  <option value="">
-                    {loadingWeddingPlanners
-                      ? "Cargando Wedding Planners..."
-                      : "Selecciona un Wedding Planner"}
-                  </option>
-
-                  {weddingPlanners.map((planner) => (
-                    <option key={planner.wp_id} value={planner.wp_id}>
-                      {planner.name} — {planner.wp_id}
-                    </option>
-                  ))}
-                </select>
+                  disabled={!!createdId}
+                />
 
                 <p
                   style={{
@@ -1560,7 +1573,7 @@ const textSizes = [
                     color: "var(--color-text-muted)",
                   }}
                 >
-                  Si llegaste desde WP STUDIO, el Wedding Planner puede venir precargado.
+                  Si llegaste desde WP STUDIO, este campo puede venir precargado.
                 </p>
 
                 <div
@@ -1590,7 +1603,7 @@ const textSizes = [
                     color: "var(--color-text-secondary)",
                   }}
                 >
-                  Si esta comunicación pertenece a una boda de CONFIRMA, selecciónala aquí. Si no, déjala como “No vinculada a CONFIRMA / Otro evento”.
+                  Selecciona la boda de CONFIRMA a la que pertenece esta comunicación.
                 </p>
 
                 <select
@@ -1617,16 +1630,13 @@ const textSizes = [
                   <option value="">
                     {loadingCelebrations
                       ? "Cargando celebraciones..."
-                      : "No vinculada a CONFIRMA / Otro evento"}
+                      : "Selecciona una celebración"}
                   </option>
 
                   {celebrations
-                    .filter(
-                      (celebration) =>
-                        !wpId.trim() ||
-                        !celebration.wp_id ||
-                        celebration.wp_id.toUpperCase() ===
-                          wpId.trim().toUpperCase()
+                    .filter((celebration) =>
+                      !wpId.trim() ||
+                      celebration.wp_id?.toUpperCase() === wpId.trim().toUpperCase()
                     )
                     .map((celebration) => (
                       <option key={celebration.id} value={celebration.id}>
@@ -1646,7 +1656,7 @@ const textSizes = [
                     color: "var(--color-text-muted)",
                   }}
                 >
-                  Esta asociación permitirá que el reporte final de cada celebración muestre únicamente sus comunicaciones vinculadas a esa boda.
+                  Esta asociación permitirá que el reporte final de la celebración muestre únicamente sus comunicaciones.
                 </p>
               </div>
 
@@ -2146,6 +2156,23 @@ const textSizes = [
                   }}
                 />
 
+                <button
+                  type="button"
+                  title="Insertar enlace"
+                  onMouseDown={
+                    handleToolbarMouseDown
+                  }
+                  onClick={
+                    insertLink
+                  }
+                  style={{
+                    ...toolbarButtonStyle,
+                    fontSize: "1rem",
+                  }}
+                >
+                  🔗
+                </button>
+
                 <div
                   style={{
                     position:
@@ -2474,8 +2501,8 @@ const textSizes = [
                 }}
               >
                 Puedes dar formato al
-                texto, insertar emojis y
-                agregar imágenes.
+                texto, insertar enlaces,
+                emojis y agregar imágenes.
                 {selectedImage &&
                   " Selecciona una imagen para cambiar su tamaño."}
               </p>
