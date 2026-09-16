@@ -49,6 +49,11 @@ type Celebration = {
   wp_id: string | null;
 };
 
+type WeddingPlanner = {
+  wp_id: string;
+  name: string;
+};
+
 type ColorTheme = {
   id: string;
   name: string;
@@ -216,6 +221,8 @@ const [messageSize, setMessageSize] = useState("normal");
   const [applyingTemplateId, setApplyingTemplateId] = useState<string | null>(null);
 
   const [wpId, setWpId] = useState("");
+  const [weddingPlanners, setWeddingPlanners] = useState<WeddingPlanner[]>([]);
+  const [loadingWeddingPlanners, setLoadingWeddingPlanners] = useState(false);
   const [celebrations, setCelebrations] = useState<Celebration[]>([]);
   const [selectedCelebrationId, setSelectedCelebrationId] = useState("");
   const [loadingCelebrations, setLoadingCelebrations] = useState(false);
@@ -691,6 +698,56 @@ const textSizes = [
       applyTemplate(template);
     }
   }, [searchParams, templates]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadWeddingPlanners() {
+      try {
+        setLoadingWeddingPlanners(true);
+
+        const response = await fetch("/api/wedding-planners", {
+          method: "GET",
+          cache: "no-store",
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            result?.error ||
+              "No fue posible cargar los Wedding Planners."
+          );
+        }
+
+        if (!cancelled) {
+          setWeddingPlanners(
+            (result?.weddingPlanners || []) as WeddingPlanner[]
+          );
+        }
+      } catch (err) {
+        console.error("Error cargando Wedding Planners:", err);
+
+        if (!cancelled) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : "No fue posible cargar los Wedding Planners."
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingWeddingPlanners(false);
+        }
+      }
+    }
+
+    loadWeddingPlanners();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -1539,7 +1596,7 @@ const textSizes = [
                   Asigna esta comunicación al Wedding Planner usando el WP ID creado en WP STUDIO.
                 </p>
 
-                <input
+                <select
                   value={wpId}
                   onChange={(e) => {
                     const nextWpId = e.target.value.toUpperCase();
@@ -1550,20 +1607,33 @@ const textSizes = [
                         (celebration) => celebration.id === selectedCelebrationId
                       );
 
-                      if (selected?.wp_id !== nextWpId.trim()) {
+                      if (
+                        selected?.wp_id?.toUpperCase() !==
+                        nextWpId.trim()
+                      ) {
                         setSelectedCelebrationId("");
                       }
                     }
                   }}
-                  placeholder="Ej. WP-0001"
+                  disabled={!!createdId || loadingWeddingPlanners}
                   style={{
                     ...inputStyle,
                     marginBottom: "12px",
                     background: "#FFFFFF",
-                    textTransform: "uppercase",
                   }}
-                  disabled={!!createdId}
-                />
+                >
+                  <option value="">
+                    {loadingWeddingPlanners
+                      ? "Cargando Wedding Planners..."
+                      : "Selecciona un Wedding Planner"}
+                  </option>
+
+                  {weddingPlanners.map((planner) => (
+                    <option key={planner.wp_id} value={planner.wp_id}>
+                      {planner.name} — {planner.wp_id}
+                    </option>
+                  ))}
+                </select>
 
                 <p
                   style={{

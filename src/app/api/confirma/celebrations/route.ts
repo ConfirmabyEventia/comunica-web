@@ -1,63 +1,90 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
-import { confirmaServer } from "@/lib/confirmaServer";
+export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const {
-      data,
-      error,
-    } = await confirmaServer
+    const supabaseUrl =
+      process.env.WP_STUDIO_SUPABASE_URL ??
+      process.env.CONFIRMA_SUPABASE_URL ??
+      process.env.NEXT_PUBLIC_SUPABASE_URL;
+
+    const serviceRoleKey =
+      process.env.WP_STUDIO_SUPABASE_SERVICE_ROLE_KEY ??
+      process.env.CONFIRMA_SUPABASE_SERVICE_ROLE_KEY ??
+      process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !serviceRoleKey) {
+      return NextResponse.json(
+        {
+          ok: false,
+          celebrations: [],
+          error:
+            "Faltan las variables de conexión de CONFIRMA/WP STUDIO.",
+        },
+        { status: 500 }
+      );
+    }
+
+    const supabase = createClient(
+      supabaseUrl,
+      serviceRoleKey,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      }
+    );
+
+    const { data, error } = await supabase
       .from("celebrations")
       .select(
-        `
-          id,
-          name,
-          event_date,
-          important_details
-        `
+        "id, name, event_date, celebration_code, wp_id, important_details"
       )
-      .neq("status", "archived")
       .order("event_date", {
         ascending: true,
+        nullsFirst: false,
       });
 
     if (error) {
       console.error(
-        "ERROR LEYENDO CELEBRACIONES DE CONFIRMA:",
+        "Error cargando celebraciones de CONFIRMA:",
         error
       );
 
       return NextResponse.json(
         {
+          ok: false,
+          celebrations: [],
           error:
             "No fue posible cargar las celebraciones de CONFIRMA.",
         },
-        {
-          status: 500,
-        }
+        { status: 500 }
       );
     }
 
     return NextResponse.json({
+      ok: true,
       celebrations: data ?? [],
     });
   } catch (error) {
     console.error(
-      "ERROR EN API CONFIRMA:",
+      "Error en /api/confirma/celebrations:",
       error
     );
 
     return NextResponse.json(
       {
+        ok: false,
+        celebrations: [],
         error:
           error instanceof Error
             ? error.message
-            : "Error inesperado.",
+            : "No fue posible cargar las celebraciones de CONFIRMA.",
       },
-      {
-        status: 500,
-      }
+      { status: 500 }
     );
   }
 }
