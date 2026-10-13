@@ -38,20 +38,6 @@ type Communication = {
   color_theme: string | null;
   typography: string | null;
   wp_id: string | null;
-  celebration_id: string | null;
-};
-
-type Celebration = {
-  id: string;
-  name: string;
-  event_date: string;
-  celebration_code: string | null;
-  wp_id: string | null;
-};
-
-type WeddingPlanner = {
-  wp_id: string;
-  name: string;
 };
 
 type ColorTheme = {
@@ -209,6 +195,8 @@ const [messageSize, setMessageSize] = useState("normal");
   const [uploadingImage, setUploadingImage] =
     useState(false);
 
+  const [uploadingPdf, setUploadingPdf] = useState(false);
+
   const [selectedImage, setSelectedImage] =
     useState<HTMLImageElement | null>(null);
 
@@ -221,11 +209,6 @@ const [messageSize, setMessageSize] = useState("normal");
   const [applyingTemplateId, setApplyingTemplateId] = useState<string | null>(null);
 
   const [wpId, setWpId] = useState("");
-  const [weddingPlanners, setWeddingPlanners] = useState<WeddingPlanner[]>([]);
-  const [loadingWeddingPlanners, setLoadingWeddingPlanners] = useState(false);
-  const [celebrations, setCelebrations] = useState<Celebration[]>([]);
-  const [selectedCelebrationId, setSelectedCelebrationId] = useState("");
-  const [loadingCelebrations, setLoadingCelebrations] = useState(false);
   const [createdId, setCreatedId] =
     useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -240,6 +223,8 @@ const [messageSize, setMessageSize] = useState("normal");
 
   const imageInputRef =
     useRef<HTMLInputElement | null>(null);
+
+  const pdfInputRef = useRef<HTMLInputElement | null>(null);
 
   const savedRangeRef =
     useRef<Range | null>(null);
@@ -307,81 +292,6 @@ const textSizes = [
     setMessage(plainText);
   }
 
-  function insertLink() {
-    const editor = editorRef.current;
-
-    if (!editor) return;
-
-    editor.focus();
-
-    const selection = window.getSelection();
-
-    if (savedRangeRef.current) {
-      selection?.removeAllRanges();
-      selection?.addRange(savedRangeRef.current);
-    }
-
-    if (!selection || selection.rangeCount === 0) {
-      setError("Selecciona primero el texto que quieres convertir en enlace.");
-      return;
-    }
-
-    const range = selection.getRangeAt(0);
-
-    if (
-      range.collapsed ||
-      !editor.contains(range.commonAncestorContainer)
-    ) {
-      setError("Selecciona primero el texto que quieres convertir en enlace.");
-      return;
-    }
-
-    const urlInput = window.prompt(
-      "Pega aquí la dirección de la página web:",
-      "https://"
-    );
-
-    if (!urlInput) return;
-
-    let url = urlInput.trim();
-
-    if (!url) return;
-
-    if (!/^https?:\/\//i.test(url)) {
-      url = `https://${url}`;
-    }
-
-    try {
-      const parsedUrl = new URL(url);
-
-      if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
-        throw new Error("URL no válida");
-      }
-    } catch {
-      setError("Ingresa una dirección web válida, por ejemplo: https://www.ejemplo.com");
-      return;
-    }
-
-    editor.focus();
-
-    selection.removeAllRanges();
-    selection.addRange(range);
-
-    document.execCommand("createLink", false, url);
-
-    const links = editor.querySelectorAll("a");
-    const lastLink = links[links.length - 1];
-
-    if (lastLink) {
-      lastLink.target = "_blank";
-      lastLink.rel = "noopener noreferrer";
-    }
-
-    updateContent();
-    saveCurrentSelection();
-    setError("");
-  }
-
   function executeCommand(
     command:
       | "bold"
@@ -396,6 +306,36 @@ const textSizes = [
 
     document.execCommand(command, false);
 
+    updateContent();
+    saveCurrentSelection();
+  }
+
+  function insertTextLink() {
+    const editor = editorRef.current;
+    if (!editor) return;
+
+    editor.focus();
+    const selection = window.getSelection();
+    if (savedRangeRef.current) {
+      selection?.removeAllRanges();
+      selection?.addRange(savedRangeRef.current);
+    }
+
+    const selectedText = selection?.toString().trim() ?? "";
+    if (!selectedText) {
+      window.alert("Primero selecciona con el mouse el texto que quieres convertir en enlace.");
+      return;
+    }
+
+    const url = window.prompt("Pega el enlace completo (incluye https://):", "https://");
+    if (!url) return;
+    const cleanUrl = url.trim();
+    if (!/^https?:\/\//i.test(cleanUrl)) {
+      window.alert("El enlace debe comenzar por https:// o http://.");
+      return;
+    }
+
+    document.execCommand("createLink", false, cleanUrl);
     updateContent();
     saveCurrentSelection();
   }
@@ -438,6 +378,69 @@ const textSizes = [
   function openImagePicker() {
     saveCurrentSelection();
     imageInputRef.current?.click();
+  }
+
+  async function handlePdfChange(
+    event: ChangeEvent<HTMLInputElement>
+  ) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+      setError("Selecciona un archivo PDF.");
+      return;
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      setError("El PDF debe pesar menos de 15 MB.");
+      return;
+    }
+
+    try {
+      setUploadingPdf(true);
+      setError("");
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const filePath = `${crypto.randomUUID()}-${safeName}`;
+      const { error: uploadError } = await supabase.storage
+        .from("communication-attachments")
+        .upload(filePath, file, { cacheControl: "3600", upsert: false, contentType: "application/pdf" });
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage.from("communication-attachments").getPublicUrl(filePath);
+      const editor = editorRef.current;
+      if (!editor) throw new Error("No se encontró el editor del mensaje.");
+      editor.focus();
+      const anchor = document.createElement("a");
+      anchor.href = data.publicUrl;
+      anchor.target = "_blank";
+      anchor.rel = "noopener noreferrer";
+      anchor.textContent = `📎 ${file.name} — Abrir o descargar PDF`;
+      anchor.style.display = "inline-block";
+      anchor.style.margin = "10px 0";
+      anchor.style.color = activeColor.color;
+      anchor.style.textDecoration = "underline";
+      anchor.style.fontWeight = "600";
+      const selection = window.getSelection();
+      const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+      if (range && editor.contains(range.commonAncestorContainer)) {
+        range.deleteContents();
+        range.insertNode(anchor);
+        range.setStartAfter(anchor);
+        range.collapse(true);
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+      } else {
+        editor.appendChild(anchor);
+      }
+      const spacer = document.createElement("br");
+      anchor.after(spacer);
+      updateContent();
+      saveCurrentSelection();
+    } catch (err) {
+      setError(err instanceof Error ? `No se pudo adjuntar el PDF: ${err.message}` : "No se pudo adjuntar el PDF.");
+    } finally {
+      setUploadingPdf(false);
+    }
   }
 
   async function handleImageChange(
@@ -700,104 +703,6 @@ const textSizes = [
   }, [searchParams, templates]);
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function loadWeddingPlanners() {
-      try {
-        setLoadingWeddingPlanners(true);
-
-        const response = await fetch("/api/wedding-planners", {
-          method: "GET",
-          cache: "no-store",
-        });
-
-        const result = await response.json();
-
-        if (!response.ok) {
-          throw new Error(
-            result?.error ||
-              "No fue posible cargar los Wedding Planners."
-          );
-        }
-
-        if (!cancelled) {
-          setWeddingPlanners(
-            (result?.weddingPlanners || []) as WeddingPlanner[]
-          );
-        }
-      } catch (err) {
-        console.error("Error cargando Wedding Planners:", err);
-
-        if (!cancelled) {
-          setError(
-            err instanceof Error
-              ? err.message
-              : "No fue posible cargar los Wedding Planners."
-          );
-        }
-      } finally {
-        if (!cancelled) {
-          setLoadingWeddingPlanners(false);
-        }
-      }
-    }
-
-    loadWeddingPlanners();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadCelebrations() {
-      try {
-        setLoadingCelebrations(true);
-
-        const response = await fetch("/api/confirma/celebrations", {
-          method: "GET",
-          cache: "no-store",
-        });
-
-        const result = await response.json();
-
-        if (!response.ok) {
-          throw new Error(
-            result?.error ||
-              "No fue posible cargar las celebraciones de CONFIRMA."
-          );
-        }
-
-        if (!cancelled) {
-          setCelebrations((result?.celebrations || []) as Celebration[]);
-        }
-      } catch (err) {
-        console.error("Error cargando celebraciones de CONFIRMA:", err);
-
-        if (!cancelled) {
-          setError(
-            err instanceof Error
-              ? err.message
-              : "No fue posible cargar las celebraciones de CONFIRMA."
-          );
-        }
-      } finally {
-        if (!cancelled) {
-          setLoadingCelebrations(false);
-        }
-      }
-    }
-
-    loadCelebrations();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
     const communicationId = searchParams.get("communication");
 
     if (!communicationId) {
@@ -827,8 +732,7 @@ const textSizes = [
               status,
               color_theme,
               typography,
-              wp_id,
-              celebration_id
+              wp_id
             `
           )
           .eq("id", communicationId)
@@ -852,7 +756,6 @@ const textSizes = [
         setEditingTemplateId(null);
         setInternalName(communication.internal_name || "");
         setWpId(communication.wp_id || "");
-        setSelectedCelebrationId(communication.celebration_id || "");
         setTitle(communication.title || "");
         setSelectedColor(
           colorThemes.some((theme) => theme.id === communication.color_theme)
@@ -916,17 +819,12 @@ const textSizes = [
       !internalName.trim() ||
       !title.trim() ||
       !plainText ||
-      (!editingTemplateId && !editingCommunicationId && !wpId.trim()) ||
-      (!editingTemplateId && !selectedCelebrationId)
+      (!editingTemplateId && !editingCommunicationId && !wpId.trim())
     ) {
       setError(
-        editingTemplateId
+        editingTemplateId || editingCommunicationId
           ? "Completa el nombre interno, el título y el mensaje."
-          : !selectedCelebrationId
-            ? "Selecciona la celebración a la que pertenece esta comunicación."
-            : editingCommunicationId
-              ? "Completa el nombre interno, el título y el mensaje."
-              : "Completa el WP ID, el nombre interno, el título y el mensaje."
+          : "Completa el WP ID, el nombre interno, el título y el mensaje."
       );
       return;
     }
@@ -943,7 +841,6 @@ const textSizes = [
           .update({
             internal_name: internalName.trim(),
             wp_id: wpId.trim().toUpperCase(),
-            celebration_id: selectedCelebrationId || null,
             title: title.trim(),
             message: plainText,
             content_html: currentHtml,
@@ -959,7 +856,6 @@ const textSizes = [
 
         setContentHtml(currentHtml);
         setMessage(plainText);
-        setCreatedId(editingCommunicationId);
         setCommunicationSaved(true);
         return;
       }
@@ -994,8 +890,6 @@ const textSizes = [
               internalName.trim(),
 
             wp_id: wpId.trim().toUpperCase(),
-
-            celebration_id: selectedCelebrationId || null,
 
             title: title.trim(),
 
@@ -1169,7 +1063,7 @@ const textSizes = [
                 ? "Modifica tu comunicación y guarda los cambios antes de enviarla."
                 : editingTemplateId
                   ? "Modifica el contenido de tu plantilla y guarda los cambios."
-                  : "Crea el mensaje, asígnalo a un Wedding Planner y a una celebración para generar el enlace público para SendPulse."}
+                  : "Crea el mensaje, asígnalo a un Wedding Planner y genera el enlace público para SendPulse."}
             </p>
           </section>
 
@@ -1563,7 +1457,7 @@ const textSizes = [
     })}
   </div>
 </div>
-              {/* WEDDING PLANNER + CELEBRACIÓN */}
+              {/* WEDDING PLANNER */}
 
               <div
                 style={{
@@ -1596,127 +1490,20 @@ const textSizes = [
                   Asigna esta comunicación al Wedding Planner usando el WP ID creado en WP STUDIO.
                 </p>
 
-                <select
+                <input
                   value={wpId}
-                  onChange={(e) => {
-                    const nextWpId = e.target.value.toUpperCase();
-                    setWpId(nextWpId);
-
-                    if (selectedCelebrationId) {
-                      const selected = celebrations.find(
-                        (celebration) => celebration.id === selectedCelebrationId
-                      );
-
-                      if (
-                        selected?.wp_id?.toUpperCase() !==
-                        nextWpId.trim()
-                      ) {
-                        setSelectedCelebrationId("");
-                      }
-                    }
-                  }}
-                  disabled={!!createdId || loadingWeddingPlanners}
-                  style={{
-                    ...inputStyle,
-                    marginBottom: "12px",
-                    background: "#FFFFFF",
-                  }}
-                >
-                  <option value="">
-                    {loadingWeddingPlanners
-                      ? "Cargando Wedding Planners..."
-                      : "Selecciona un Wedding Planner"}
-                  </option>
-
-                  {weddingPlanners.map((planner) => (
-                    <option key={planner.wp_id} value={planner.wp_id}>
-                      {planner.name} — {planner.wp_id}
-                    </option>
-                  ))}
-                </select>
-
-                <p
-                  style={{
-                    margin: "0 0 14px",
-                    fontSize: "0.74rem",
-                    lineHeight: 1.45,
-                    color: "var(--color-text-muted)",
-                  }}
-                >
-                  Si llegaste desde WP STUDIO, este campo puede venir precargado.
-                </p>
-
-                <div
-                  style={{
-                    height: "1px",
-                    background: "var(--color-border)",
-                    margin: "4px 0 18px",
-                  }}
-                />
-
-                <div
-                  style={{
-                    fontSize: "0.76rem",
-                    letterSpacing: "0.08em",
-                    textTransform: "uppercase",
-                    color: "var(--color-text-secondary)",
-                  }}
-                >
-                  Celebración
-                </div>
-
-                <p
-                  style={{
-                    margin: "7px 0 14px",
-                    fontSize: "0.9rem",
-                    lineHeight: 1.5,
-                    color: "var(--color-text-secondary)",
-                  }}
-                >
-                  Selecciona la boda de CONFIRMA a la que pertenece esta comunicación.
-                </p>
-
-                <select
-                  value={selectedCelebrationId}
-                  onChange={(e) => {
-                    const nextCelebrationId = e.target.value;
-                    setSelectedCelebrationId(nextCelebrationId);
-
-                    const selected = celebrations.find(
-                      (celebration) => celebration.id === nextCelebrationId
-                    );
-
-                    if (selected?.wp_id) {
-                      setWpId(selected.wp_id.toUpperCase());
-                    }
-                  }}
-                  disabled={!!createdId || loadingCelebrations}
+                  onChange={(e) =>
+                    setWpId(e.target.value.toUpperCase())
+                  }
+                  placeholder="Ej. WP-0001"
                   style={{
                     ...inputStyle,
                     marginBottom: 0,
                     background: "#FFFFFF",
+                    textTransform: "uppercase",
                   }}
-                >
-                  <option value="">
-                    {loadingCelebrations
-                      ? "Cargando celebraciones..."
-                      : "Selecciona una celebración"}
-                  </option>
-
-                  {celebrations
-                    .filter((celebration) =>
-                      !wpId.trim() ||
-                      celebration.wp_id?.toUpperCase() === wpId.trim().toUpperCase()
-                    )
-                    .map((celebration) => (
-                      <option key={celebration.id} value={celebration.id}>
-                        {celebration.name}
-                        {celebration.event_date
-                          ? ` · ${celebration.event_date}`
-                          : ""}
-                      </option>
-                    ))}
-                </select>
+                  disabled={!!createdId}
+                />
 
                 <p
                   style={{
@@ -1726,7 +1513,7 @@ const textSizes = [
                     color: "var(--color-text-muted)",
                   }}
                 >
-                  Esta asociación permitirá que el reporte final de la celebración muestre únicamente sus comunicaciones.
+                  Si llegaste desde WP STUDIO, este campo puede venir precargado.
                 </p>
               </div>
 
@@ -2124,6 +1911,15 @@ const textSizes = [
                 >
                   U
                 </button>
+                <button
+                  type="button"
+                  title="Convertir texto seleccionado en enlace"
+                  onMouseDown={handleToolbarMouseDown}
+                  onClick={insertTextLink}
+                  style={{ ...toolbarButtonStyle, fontSize: "0.82rem", padding: "6px 10px" }}
+                >
+                  🔗 Link
+                </button>
 
                 <div
                   style={{
@@ -2225,23 +2021,6 @@ const textSizes = [
                       "var(--color-border)",
                   }}
                 />
-
-                <button
-                  type="button"
-                  title="Insertar enlace"
-                  onMouseDown={
-                    handleToolbarMouseDown
-                  }
-                  onClick={
-                    insertLink
-                  }
-                  style={{
-                    ...toolbarButtonStyle,
-                    fontSize: "1rem",
-                  }}
-                >
-                  🔗
-                </button>
 
                 <div
                   style={{
@@ -2357,6 +2136,25 @@ const textSizes = [
                 >
                   🖼️
                 </button>
+
+                <button
+                  type="button"
+                  title="Adjuntar PDF al mensaje"
+                  onMouseDown={handleToolbarMouseDown}
+                  onClick={() => { saveCurrentSelection(); pdfInputRef.current?.click(); }}
+                  disabled={uploadingPdf}
+                  style={{ ...toolbarButtonStyle, opacity: uploadingPdf ? 0.55 : 1 }}
+                >
+                  {uploadingPdf ? "Subiendo PDF…" : "📎 PDF"}
+                </button>
+
+                <input
+                  ref={pdfInputRef}
+                  type="file"
+                  accept="application/pdf,.pdf"
+                  onChange={handlePdfChange}
+                  style={{ display: "none" }}
+                />
 
                 <input
                   ref={imageInputRef}
@@ -2571,8 +2369,8 @@ const textSizes = [
                 }}
               >
                 Puedes dar formato al
-                texto, insertar enlaces,
-                emojis y agregar imágenes.
+                texto, insertar emojis y
+                agregar imágenes.
                 {selectedImage &&
                   " Selecciona una imagen para cambiar su tamaño."}
               </p>
@@ -2657,33 +2455,6 @@ const textSizes = [
                         ? "Comunicación creada"
                         : "Guardar comunicación"}
               </button>
-
-              {editingCommunicationId && communicationSaved && createdId && (
-                <Link
-                  href={`/message/${createdId}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    width: "100%",
-                    minHeight: "48px",
-                    marginTop: "12px",
-                    padding: "0 24px",
-                    borderRadius: "999px",
-                    border: "1px solid var(--color-primary)",
-                    background: "#FFFFFF",
-                    color: "var(--color-primary)",
-                    fontSize: "0.94rem",
-                    fontWeight: 500,
-                    textDecoration: "none",
-                    boxSizing: "border-box",
-                  }}
-                >
-                  Ver vista pública ↗
-                </Link>
-              )}
             </section>
 
             {/* RIGHT / PREVIEW */}
@@ -2735,121 +2506,141 @@ const textSizes = [
                 Así lo verá la persona
               </h2>
 
-              {/* MESSAGE CARD — estructura fija; el color solo cambia identidad visual */}
+              {/* MESSAGE CARD */}
 
               <div
                 style={{
-                  background: activeColor.soft,
-                  borderRadius: "24px",
-                  padding: "16px",
-                  transition: "background 0.2s ease",
+                  background:
+                    activeColor.soft,
+                  borderRadius:
+                    "24px",
+                  padding:
+                    "16px",
+                  transition:
+                    "background 0.2s ease",
                 }}
               >
-                <article
+                <div
                   style={{
-                    width: "100%",
-                    background: "#FFFFFF",
-                    border: `1px solid ${activeColor.color}30`,
-                    borderRadius: "22px",
-                    padding: "30px 26px",
-                    boxSizing: "border-box",
-                    boxShadow: "0 10px 28px rgba(60, 50, 35, 0.05)",
+                    position:
+                      "relative",
+                    overflow:
+                      "hidden",
+                    background:
+                      "#FFFFFF",
+                    border:
+                      `1px solid ${activeColor.color}30`,
+                    borderRadius:
+                      "22px",
+                    padding:
+                      "30px 26px",
+                    minHeight:
+                      "430px",
                   }}
                 >
-                  <p
-                    style={{
-                      margin: 0,
-                      fontSize: "0.68rem",
-                      letterSpacing: "0.18em",
-                      textTransform: "uppercase",
-                      color: activeColor.color,
-                      textAlign: "center",
-                    }}
-                  >
-                    EVENSSE · COMUNICA
-                  </p>
-
                   <div
                     style={{
-                      width: "54px",
-                      height: "1px",
-                      margin: "24px auto 0",
-                      background: activeColor.color,
+                      width:
+                        "54px",
+                      height:
+                        "1px",
+                      margin:
+                        "0 auto 26px",
+                      background:
+                        activeColor.color,
                     }}
                   />
 
-                  <h3
+                  <div
                     style={{
-                      margin: "24px 0 0",
-                      fontFamily: activeTypography.fontFamily,
-                      fontWeight: 500,
-                      fontSize: titleFontSizes[titleSize],
-                      lineHeight: 1.12,
-                      textAlign: "center",
-                      color: activeColor.color,
+                      textAlign:
+                        "center",
+                      fontSize:
+                        "0.68rem",
+                      letterSpacing:
+                        "0.18em",
+                      textTransform:
+                        "uppercase",
+                      color:
+                        activeColor.color,
                     }}
                   >
-                    {title || "Título de tu comunicación"}
-                  </h3>
+                    COMUNICA
+                  </div>
+
+                  <h3
+  style={{
+    margin:
+      "24px 0 0",
+    fontFamily:
+      activeTypography.fontFamily,
+    fontWeight:
+      500,
+    fontSize:
+      titleFontSizes[titleSize],
+    lineHeight:
+      1.12,
+    textAlign:
+      "center",
+    color:
+      activeColor.color,
+  }}
+>
+  {title ||
+    "Título de tu comunicación"}
+</h3>
 
                   <div
                     style={{
-                      width: "42px",
-                      height: "1px",
-                      margin: "22px auto",
-                      background: activeColor.color,
+                      width:
+                        "42px",
+                      height:
+                        "1px",
+                      margin:
+                        "22px auto",
+                      background:
+                        activeColor.color,
                       opacity: 0.55,
                     }}
                   />
 
                   <div
                     style={{
-                      fontFamily: activeTypography.fontFamily,
-                      fontSize: messageSize === "large" ? "1.08rem" : "1rem",
-                      lineHeight: 1.7,
-                      color: "var(--color-text)",
-                      overflowWrap: "anywhere",
+                      fontFamily:
+                        activeTypography.fontFamily,
+                      fontSize:
+                        "1rem",
+                      lineHeight:
+                        1.7,
+                      color:
+                        "var(--color-text)",
+                      textAlign:
+                        "left",
+                      overflowWrap:
+                        "anywhere",
                     }}
                   >
                     {contentHtml ? (
                       <div
                         dangerouslySetInnerHTML={{
-                          __html: contentHtml,
+                          __html:
+                            contentHtml,
                         }}
                       />
                     ) : (
-                      <div
+                      <span
                         style={{
-                          whiteSpace: "pre-wrap",
-                          color: "var(--color-text-muted)",
+                          color:
+                            "var(--color-text-muted)",
                         }}
                       >
-                        Aquí aparecerá el contenido de tu mensaje.
-                      </div>
+                        Aquí aparecerá el
+                        contenido de tu
+                        mensaje.
+                      </span>
                     )}
                   </div>
-
-                  <div
-                    style={{
-                      marginTop: "30px",
-                      paddingTop: "18px",
-                      borderTop: `1px solid ${activeColor.color}20`,
-                      textAlign: "center",
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontFamily: "Montserrat, sans-serif",
-                        fontSize: "0.62rem",
-                        letterSpacing: "0.14em",
-                        textTransform: "uppercase",
-                        color: "#99918A",
-                      }}
-                    >
-                      COMUNICA · EVENSSE
-                    </span>
-                  </div>
-                </article>
+                </div>
               </div>
 
               {/* SELECTED STYLE */}
