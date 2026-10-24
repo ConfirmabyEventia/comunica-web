@@ -1,30 +1,15 @@
+
 import { notFound } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
-
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
 
 type Props = {
   params: Promise<{ id: string }>;
 };
 
-type ColorTheme = {
-  id: string;
-  name: string;
-  color: string;
-  soft: string;
-};
-
-type Typography = {
-  id: string;
-  name: string;
-  font: string;
-  fontFamily: string;
-};
-
 type Person = {
   id: string;
   name: string;
+  event_id: string;
   titular_name: string | null;
 };
 
@@ -34,1080 +19,235 @@ type Assignment = {
   table_name: string | null;
 };
 
-const colorThemes: ColorTheme[] = [
-  {
-    id: "salvia",
-    name: "Salvia",
-    color: "#A7A98A",
-    soft: "#EEF0E7",
-  },
-  {
-    id: "lavanda",
-    name: "Lavanda",
-    color: "#B8A5BD",
-    soft: "#F1EBF3",
-  },
-  {
-    id: "terracota",
-    name: "Terracota",
-    color: "#C97A5B",
-    soft: "#F6E9E3",
-  },
-  {
-    id: "arena",
-    name: "Arena",
-    color: "#D8C4A4",
-    soft: "#F5EFE6",
-  },
-  {
-    id: "azul-niebla",
-    name: "Azul Niebla",
-    color: "#7890A1",
-    soft: "#E9EFF2",
-  },
-  {
-    id: "vino",
-    name: "Vino",
-    color: "#76283A",
-    soft: "#F1E4E7",
-  },
-];
-
-const typographyOptions: Typography[] = [
-  {
-    id: "editorial",
-    name: "Editorial",
-    font: "Cormorant Garamond",
-    fontFamily: "'Cormorant Garamond', serif",
-  },
-  {
-    id: "clasica",
-    name: "Clásica",
-    font: "Playfair Display",
-    fontFamily: "'Playfair Display', serif",
-  },
-  {
-    id: "contemporanea",
-    name: "Contemporánea",
-    font: "Montserrat",
-    fontFamily: "'Montserrat', sans-serif",
-  },
-  {
-    id: "romantica",
-    name: "Suave",
-    font: "Trebuchet MS",
-    fontFamily: "'Trebuchet MS', Arial, sans-serif",
-  },
-];
-
-export default async function PublicMessagePage({
-  params,
-}: Props) {
+export default async function MessagePage({ params }: Props) {
   const { id } = await params;
+  const code = decodeURIComponent(id).trim();
 
-  const publicId = id.trim();
-
-  /*
-   * =========================================================
-   * 1. PRIMERO INTENTAMOS BUSCAR UNA COMUNICACIÓN NORMAL
-   *
-   * Ejemplo:
-   *
-   * /message/1da250cd-d50e-44ce-8b7c-29c1428780bf
-   *
-   * Si existe una comunicación publicada con ese UUID,
-   * la mostramos directamente.
-   *
-   * NO buscamos códigos, titulares ni mesas.
-   * =========================================================
-   */
-
-  const {
-    data: directCommunication,
-    error: directCommunicationError,
-  } = await supabase
-    .from("communications")
-    .select(
-      `
-        id,
-        title,
-        message,
-        content_html,
-        color_theme,
-        typography,
-        button_text,
-        button_url,
-        is_published
-      `
-    )
-    .eq("id", publicId)
-    .eq("is_published", true)
-    .maybeSingle();
-
-  /*
-   * =========================================================
-   * 2. SI ES UNA COMUNICACIÓN NORMAL
-   * =========================================================
-   */
-
-  if (
-    !directCommunicationError &&
-    directCommunication
-  ) {
-    return (
-      <PublicCommunication
-        communication={directCommunication}
-      />
-    );
-  }
-
-  /*
-   * =========================================================
-   * 3. SI NO ES UUID DE COMUNICACIÓN,
-   *    INTENTAMOS COMO CÓDIGO DE TITULAR
-   *
-   * Esto mantiene funcionando:
-   *
-   * /message/E95UJG
-   *
-   * para comunicaciones personalizadas de mesas.
-   * =========================================================
-   */
-
-  const publicCode = publicId.toUpperCase();
-
-  const {
-    data: groupCode,
-    error: groupCodeError,
-  } = await supabase
+  // 1. Buscar el código del grupo familiar.
+  const { data: groupCode, error: codeError } = await supabase
     .from("table_group_codes")
-    .select(
-      `
-        principal_person_id,
-        code
-      `
-    )
-    .eq("code", publicCode)
+    .select("event_id, principal_person_id, code")
+    .eq("code", code)
     .maybeSingle();
 
-  if (
-    groupCodeError ||
-    !groupCode
-  ) {
+  if (codeError) {
+    console.error("Error buscando código de mesas:", codeError);
+    throw new Error("No fue posible consultar el código de acceso.");
+  }
+
+  if (!groupCode) {
     notFound();
   }
 
-  /*
-   * =========================================================
-   * 4. BUSCAR TITULAR
-   * =========================================================
-   */
-
-  const {
-    data: principal,
-    error: principalError,
-  } = await supabase
+  // 2. Encontrar al titular del grupo.
+  const { data: principal, error: principalError } = await supabase
     .from("people")
-    .select(
-      `
-        id,
-        event_id,
-        name,
-        titular_name
-      `
-    )
-    .eq(
-      "id",
-      groupCode.principal_person_id
-    )
-    .single();
+    .select("id, name, event_id, titular_name")
+    .eq("id", groupCode.principal_person_id)
+    .eq("event_id", groupCode.event_id)
+    .maybeSingle();
 
-  if (
-    principalError ||
-    !principal
-  ) {
+  if (principalError) {
+    console.error("Error buscando titular:", principalError);
+    throw new Error("No fue posible consultar los datos del titular.");
+  }
+
+  if (!principal) {
     notFound();
   }
 
-  /*
-   * =========================================================
-   * 5. BUSCAR EVENTO
-   * =========================================================
-   */
-
-  const {
-    data: event,
-    error: eventError,
-  } = await supabase
-    .from("events")
-    .select("name")
-    .eq("id", principal.event_id)
-    .single();
-
-  if (
-    eventError ||
-    !event
-  ) {
-    notFound();
-  }
-
-  const eventName =
-    String(event.name ?? "").trim();
-
-  /*
-   * =========================================================
-   * 6. BUSCAR GRUPO FAMILIAR
-   * =========================================================
-   */
-
-  const {
-    data: familyPeople,
-    error: familyError,
-  } = await supabase
+  // 3. Obtener los integrantes del grupo familiar.
+  const { data: eventPeople, error: peopleError } = await supabase
     .from("people")
-    .select(
-      `
-        id,
-        name,
-        titular_name
-      `
-    )
-    .eq(
-      "event_id",
-      principal.event_id
-    )
-    .eq(
-      "titular_name",
-      principal.name
-    )
-    .order("name");
+    .select("id, name, event_id, titular_name")
+    .eq("event_id", groupCode.event_id);
 
-  if (familyError) {
-    notFound();
+  if (peopleError) {
+    console.error("Error buscando integrantes:", peopleError);
+    throw new Error("No fue posible consultar los integrantes del grupo.");
   }
 
-  const people: Person[] =
-    familyPeople ?? [];
+  const principalName = principal.name.trim();
 
-  /*
-   * =========================================================
-   * 7. BUSCAR ASIGNACIONES
-   * =========================================================
-   */
-
-  const personIds = people.map(
-    (person) => person.id
+  const members: Person[] = (eventPeople ?? []).filter(
+    (person: Person) =>
+      person.id === principal.id ||
+      (person.titular_name ?? "").trim() === principalName
   );
+
+  // 4. Buscar las mesas asignadas a esos integrantes.
+  const memberIds = members.map((person) => person.id);
 
   let assignments: Assignment[] = [];
 
-  if (personIds.length > 0) {
-    const {
-      data: assignmentData,
-      error: assignmentError,
-    } = await supabase
+  if (memberIds.length > 0) {
+    const { data, error: assignmentsError } = await supabase
       .from("table_assignments")
-      .select(
-        `
-          person_id,
-          table_number,
-          table_name
-        `
-      )
-      .eq(
-        "event_id",
-        principal.event_id
-      )
-      .in(
-        "person_id",
-        personIds
-      );
+      .select("person_id, table_number, table_name")
+      .eq("event_id", groupCode.event_id)
+      .in("person_id", memberIds);
 
-    if (assignmentError) {
-      notFound();
+    if (assignmentsError) {
+      console.error("Error buscando asignaciones:", assignmentsError);
+      throw new Error("No fue posible consultar las mesas asignadas.");
     }
 
-    assignments =
-      (assignmentData ??
-        []) as Assignment[];
+    assignments = (data ?? []) as Assignment[];
   }
 
-  /*
-   * =========================================================
-   * 8. BUSCAR COMUNICACIÓN DE MESAS
-   * =========================================================
-   */
+  // 5. Consultar el nombre de la celebración.
+  const { data: event, error: eventError } = await supabase
+    .from("events")
+    .select("name")
+    .eq("id", groupCode.event_id)
+    .maybeSingle();
 
-  const {
-    data: communication,
-    error: communicationError,
-  } = await supabase
-    .from("communications")
-    .select(
-      `
-        id,
-        title,
-        message,
-        content_html,
-        color_theme,
-        typography,
-        button_text,
-        button_url,
-        is_published
-      `
-    )
-    .eq(
-      "internal_name",
-      "Asignación de mesas"
-    )
-    .eq(
-      "is_published",
-      true
-    )
-    .single();
-
-  if (
-    communicationError ||
-    !communication
-  ) {
-    notFound();
+  if (eventError) {
+    console.error("Error buscando celebración:", eventError);
   }
-
-  /*
-   * =========================================================
-   * 9. TEMA
-   * =========================================================
-   */
-
-  const activeColor =
-    colorThemes.find(
-      (theme) =>
-        theme.id ===
-        communication.color_theme
-    ) ?? colorThemes[0];
-
-  const activeTypography =
-    typographyOptions.find(
-      (font) =>
-        font.id ===
-        communication.typography
-    ) ?? typographyOptions[0];
-
-  /*
-   * =========================================================
-   * 10. MAPA DE ASIGNACIONES
-   * =========================================================
-   */
-
-  const assignmentByPerson =
-    new Map(
-      assignments.map(
-        (assignment) => [
-          assignment.person_id,
-          assignment,
-        ]
-      )
-    );
-
-  /*
-   * =========================================================
-   * 11. CONSTRUIR ASIGNACIONES
-   * =========================================================
-   */
-
-  const assignmentHtml = people
-    .map((person) => {
-      const assignment =
-        assignmentByPerson.get(
-          person.id
-        );
-
-      const rawTableNumber =
-        String(
-          assignment?.table_number ??
-            ""
-        ).trim();
-
-      const rawTableName =
-        String(
-          assignment?.table_name ??
-            ""
-        ).trim();
-
-      let tableText =
-        "Mesa por confirmar";
-
-      const normalizedNumber =
-        rawTableNumber.toLowerCase();
-
-      const normalizedName =
-        rawTableName.toLowerCase();
-
-      if (
-        rawTableNumber &&
-        rawTableName &&
-        normalizedNumber ===
-          normalizedName
-      ) {
-        tableText =
-          rawTableNumber;
-      } else if (
-        rawTableNumber &&
-        rawTableName
-      ) {
-        const cleanNumber =
-          rawTableNumber.replace(
-            /^mesa\s*/i,
-            ""
-          );
-
-        const cleanName =
-          rawTableName.replace(
-            /^mesa\s*/i,
-            ""
-          );
-
-        if (
-          cleanNumber &&
-          cleanName &&
-          cleanNumber.toLowerCase() ===
-            cleanName.toLowerCase()
-        ) {
-          tableText =
-            `Mesa ${cleanNumber}`;
-        } else if (
-          rawTableName
-            .toLowerCase()
-            .startsWith("mesa ")
-        ) {
-          tableText =
-            rawTableName;
-        } else if (
-          rawTableNumber
-            .toLowerCase()
-            .startsWith("mesa ")
-        ) {
-          tableText =
-            rawTableNumber;
-        } else {
-          tableText =
-            `Mesa ${rawTableNumber} · ${rawTableName}`;
-        }
-      } else if (
-        rawTableNumber
-      ) {
-        if (
-          rawTableNumber
-            .toLowerCase()
-            .startsWith("mesa ")
-        ) {
-          tableText =
-            rawTableNumber;
-        } else {
-          tableText =
-            `Mesa ${rawTableNumber}`;
-        }
-      } else if (
-        rawTableName
-      ) {
-        tableText =
-          rawTableName;
-      }
-
-      return `
-        <div style="
-          margin: 0 0 14px;
-          padding: 14px 16px;
-          border-radius: 14px;
-          background: ${activeColor.soft};
-        ">
-          <div style="
-            font-weight: 600;
-            color: ${activeColor.color};
-          ">
-            ${escapeHtml(person.name)}
-          </div>
-
-          <div style="
-            margin-top: 4px;
-            font-size: 0.92rem;
-            color: #5F5A55;
-          ">
-            ${escapeHtml(tableText)}
-          </div>
-        </div>
-      `;
-    })
-    .join("");
-
-  /*
-   * =========================================================
-   * 12. REEMPLAZAR VARIABLES
-   * =========================================================
-   */
-
-  const replaceVariables = (
-    content: string
-  ): string => {
-    return content
-      .replace(
-        /\{\{nombre_titular\}\}/g,
-        escapeHtml(principal.name)
-      )
-      .replace(
-        /\{\{asignacion_mesas\}\}/g,
-        assignmentHtml
-      )
-      .replace(
-        /\{\{nombre_de_los_novios\}\}/g,
-        escapeHtml(eventName)
-      )
-      .replace(
-        /\{\{nombre_evento\}\}/g,
-        escapeHtml(eventName)
-      );
-  };
-
-  /*
-   * =========================================================
-   * 13. CONTENIDO FINAL
-   * =========================================================
-   */
-
-  const hasHtml =
-    typeof communication.content_html ===
-      "string" &&
-    communication.content_html
-      .trim()
-      .length > 0;
-
-const renderedHtml =
-  hasHtml
-    ? replaceVariables(
-        communication.content_html ?? ""
-      )
-    : "";
-
-  const renderedMessage =
-    replaceVariables(
-      communication.message ?? ""
-    );
-
-  /*
-   * =========================================================
-   * 14. RENDER PERSONALIZADO
-   * =========================================================
-   */
 
   return (
     <main
       style={{
         minHeight: "100vh",
-        boxSizing: "border-box",
-        padding: "34px 20px 60px",
-        background: `linear-gradient(
-          180deg,
-          ${activeColor.soft} 0%,
-          #FBF9F4 48%,
-          #F8F5EF 100%
-        )`,
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "flex-start",
+        padding: "40px 18px",
+        background: "#F7F5EF",
+        color: "#4F5142",
+        fontFamily: "Georgia, serif",
       }}
     >
       <article
         style={{
-          width: "100%",
-          maxWidth: "680px",
-          marginTop: "7vh",
+          maxWidth: "650px",
+          margin: "0 auto",
+          padding: "36px 26px",
           background: "#FFFFFF",
-          border: `1px solid ${activeColor.color}30`,
-          borderRadius: "30px",
-          padding: "42px 40px",
-          boxSizing: "border-box",
-          boxShadow:
-            "0 16px 45px rgba(60, 50, 35, 0.06)",
+          border: "1px solid #E6E3D9",
+          borderRadius: "22px",
+          boxShadow: "0 8px 30px rgba(0,0,0,0.04)",
         }}
       >
         <p
           style={{
-            margin: 0,
-            fontSize: "0.7rem",
-            letterSpacing: "0.2em",
-            textTransform: "uppercase",
-            color: activeColor.color,
             textAlign: "center",
+            fontSize: "11px",
+            letterSpacing: "3px",
+            textTransform: "uppercase",
+            color: "#8B8D70",
           }}
         >
-          EVENSSE · COMUNICA
+          Información para invitados
         </p>
-
-        <div
-          style={{
-            width: "54px",
-            height: "1px",
-            margin: "24px auto 0",
-            background:
-              activeColor.color,
-          }}
-        />
 
         <h1
           style={{
-            margin: "24px 0 0",
-            fontFamily:
-              activeTypography.fontFamily,
-            fontSize:
-              activeTypography.id ===
-              "romantica"
-                ? "clamp(2.8rem, 8vw, 4rem)"
-                : "clamp(2.15rem, 6vw, 3.4rem)",
-            fontWeight:
-              activeTypography.id ===
-              "romantica"
-                ? 400
-                : 500,
-            lineHeight: 1.08,
-            color:
-              activeColor.color,
             textAlign: "center",
+            fontSize: "32px",
+            fontWeight: 400,
+            margin: "20px 0 10px",
           }}
         >
-          {communication.title}
+          Tu asignación de mesas
         </h1>
 
-        <div
-          style={{
-            marginTop: "30px",
-            fontFamily:
-              activeTypography.fontFamily,
-            fontSize:
-              activeTypography.id ===
-              "romantica"
-                ? "1.35rem"
-                : "1rem",
-            lineHeight: 1.75,
-            color: "#4F4A45",
-            overflowWrap: "anywhere",
-          }}
-        >
-          {hasHtml ? (
-            <div
-              dangerouslySetInnerHTML={{
-                __html: renderedHtml,
-              }}
-            />
-          ) : (
-            <div
-              style={{
-                whiteSpace:
-                  "pre-wrap",
-              }}
-            >
-              {renderedMessage}
-            </div>
-          )}
-        </div>
+        <p style={{ textAlign: "center", lineHeight: 1.7 }}>
+          Hola, <strong>{principal.name}</strong>. 🤍
+          <br />
+          Aquí puedes consultar la mesa asignada a cada integrante de tu
+          grupo familiar.
+        </p>
 
-        {communication.button_text &&
-          communication.button_url && (
-            <div
-              style={{
-                display: "flex",
-                justifyContent:
-                  "center",
-              }}
-            >
-              <a
-                href={
-                  communication.button_url
-                }
-                target="_blank"
-                rel="noreferrer"
-                style={{
-                  display:
-                    "inline-flex",
-                  alignItems:
-                    "center",
-                  justifyContent:
-                    "center",
-                  marginTop: "30px",
-                  minHeight: "48px",
-                  padding:
-                    "0 24px",
-                  borderRadius:
-                    "999px",
-                  background:
-                    activeColor.color,
-                  color: "#FFFFFF",
-                  fontFamily:
-                    "'Montserrat', sans-serif",
-                  fontSize:
-                    "0.9rem",
-                  fontWeight: 500,
-                  textDecoration:
-                    "none",
-                  boxShadow:
-                    "0 8px 20px rgba(60, 50, 35, 0.10)",
-                }}
-              >
-                {
-                  communication.button_text
-                }
-              </a>
-            </div>
-          )}
-
-        <div
-          style={{
-            marginTop: "38px",
-            paddingTop: "22px",
-            borderTop:
-              `1px solid ${activeColor.color}20`,
-            textAlign: "center",
-          }}
-        >
-          <span
+        {event?.name && (
+          <p
             style={{
-              fontFamily:
-                "'Montserrat', sans-serif",
-              fontSize:
-                "0.68rem",
-              letterSpacing:
-                "0.14em",
-              textTransform:
-                "uppercase",
-              color: "#99918A",
+              textAlign: "center",
+              margin: "22px 0",
+              color: "#777866",
+              fontSize: "15px",
             }}
           >
-            COMUNICA · EVENSSE
-          </span>
+            {event.name}
+          </p>
+        )}
+
+        <div
+          style={{
+            marginTop: "28px",
+            padding: "22px",
+            background: "#F7F6F0",
+            borderRadius: "16px",
+          }}
+        >
+          <h2
+            style={{
+              fontSize: "19px",
+              fontWeight: 400,
+              marginTop: 0,
+              marginBottom: "18px",
+            }}
+          >
+            Grupo familiar
+          </h2>
+
+          {members.map((person) => {
+            const assignment = assignments.find(
+              (item) => item.person_id === person.id
+            );
+
+            const table =
+              assignment?.table_number?.trim() ||
+              assignment?.table_name?.trim();
+
+            return (
+              <div
+                key={person.id}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: "16px",
+                  padding: "15px 0",
+                  borderBottom: "1px solid #E5E2D8",
+                }}
+              >
+                <span style={{ lineHeight: 1.5 }}>{person.name}</span>
+
+                <span
+                  style={{
+                    flexShrink: 0,
+                    fontFamily: "Arial, sans-serif",
+                    fontSize: "13px",
+                    fontWeight: 600,
+                    color: "#596047",
+                    background: "#E9EBDD",
+                    borderRadius: "9px",
+                    padding: "9px 12px",
+                  }}
+                >
+                  {table || "Mesa pendiente"}
+                </span>
+              </div>
+            );
+          })}
+
+          {members.length === 0 && (
+            <p>No encontramos integrantes asociados a este grupo.</p>
+          )}
         </div>
-      </article>
 
-      <style>
-        {`
-          img {
-            max-width: 100%;
-            height: auto;
-          }
-
-          article p {
-            margin-left: 0;
-            margin-right: 0;
-          }
-
-          article img {
-            display: block;
-          }
-
-          article a {
-            overflow-wrap: anywhere;
-          }
-        `}
-      </style>
-    </main>
-  );
-}
-
-/*
- * =========================================================
- * COMUNICACIÓN NORMAL
- * =========================================================
- */
-
-function PublicCommunication({
-  communication,
-}: {
-  communication: {
-    id: string;
-    title: string;
-    message: string | null;
-    content_html: string | null;
-    color_theme: string | null;
-    typography: string | null;
-    button_text: string | null;
-    button_url: string | null;
-    is_published: boolean;
-  };
-}) {
-  const activeColor =
-    colorThemes.find(
-      (theme) =>
-        theme.id ===
-        communication.color_theme
-    ) ?? colorThemes[0];
-
-  const activeTypography =
-    typographyOptions.find(
-      (font) =>
-        font.id ===
-        communication.typography
-    ) ?? typographyOptions[0];
-
-  const hasHtml =
-    typeof communication.content_html ===
-      "string" &&
-    communication.content_html
-      .trim()
-      .length > 0;
-
-  const renderedHtml =
-    hasHtml
-      ? communication.content_html
-      : "";
-
-  return (
-    <main
-      style={{
-        minHeight: "100vh",
-        boxSizing: "border-box",
-        padding: "34px 20px 60px",
-        background: `linear-gradient(
-          180deg,
-          ${activeColor.soft} 0%,
-          #FBF9F4 48%,
-          #F8F5EF 100%
-        )`,
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "flex-start",
-      }}
-    >
-      <article
-        style={{
-          width: "100%",
-          maxWidth: "680px",
-          marginTop: "7vh",
-          background: "#FFFFFF",
-          border: `1px solid ${activeColor.color}30`,
-          borderRadius: "30px",
-          padding: "42px 40px",
-          boxSizing: "border-box",
-          boxShadow:
-            "0 16px 45px rgba(60, 50, 35, 0.06)",
-        }}
-      >
         <p
           style={{
-            margin: 0,
-            fontSize: "0.7rem",
-            letterSpacing: "0.2em",
-            textTransform: "uppercase",
-            color:
-              activeColor.color,
+            marginTop: "26px",
             textAlign: "center",
+            lineHeight: 1.7,
+            fontSize: "14px",
           }}
         >
-          EVENSSE · COMUNICA
+          Te recomendamos revisar la información de cada integrante.
+          <br />
+          ¡Esperamos que disfruten muchísimo esta celebración! ✨
         </p>
-
-        <div
-          style={{
-            width: "54px",
-            height: "1px",
-            margin: "24px auto 0",
-            background:
-              activeColor.color,
-          }}
-        />
-
-        <h1
-          style={{
-            margin:
-              "24px 0 0",
-            fontFamily:
-              activeTypography.fontFamily,
-            fontSize:
-              activeTypography.id ===
-              "romantica"
-                ? "clamp(2.8rem, 8vw, 4rem)"
-                : "clamp(2.15rem, 6vw, 3.4rem)",
-            fontWeight:
-              activeTypography.id ===
-              "romantica"
-                ? 400
-                : 500,
-            lineHeight: 1.08,
-            color:
-              activeColor.color,
-            textAlign: "center",
-          }}
-        >
-          {communication.title}
-        </h1>
-
-        <div
-          style={{
-            marginTop:
-              "30px",
-            fontFamily:
-              activeTypography.fontFamily,
-            fontSize:
-              activeTypography.id ===
-              "romantica"
-                ? "1.35rem"
-                : "1rem",
-            lineHeight:
-              1.75,
-            color:
-              "#4F4A45",
-            overflowWrap:
-              "anywhere",
-          }}
-        >
-     {hasHtml ? (
-  <div
-    dangerouslySetInnerHTML={{
-      __html: String(renderedHtml ?? ""),
-    }}
-  />
-) : (
-            <div
-              style={{
-                whiteSpace:
-                  "pre-wrap",
-              }}
-            >
-              {communication.message ??
-                ""}
-            </div>
-          )}
-        </div>
-
-        {communication.button_text &&
-          communication.button_url && (
-            <div
-              style={{
-                display:
-                  "flex",
-                justifyContent:
-                  "center",
-              }}
-            >
-              <a
-                href={
-                  communication.button_url
-                }
-                target="_blank"
-                rel="noreferrer"
-                style={{
-                  display:
-                    "inline-flex",
-                  alignItems:
-                    "center",
-                  justifyContent:
-                    "center",
-                  marginTop:
-                    "30px",
-                  minHeight:
-                    "48px",
-                  padding:
-                    "0 24px",
-                  borderRadius:
-                    "999px",
-                  background:
-                    activeColor.color,
-                  color:
-                    "#FFFFFF",
-                  fontFamily:
-                    "'Montserrat', sans-serif",
-                  fontSize:
-                    "0.9rem",
-                  fontWeight:
-                    500,
-                  textDecoration:
-                    "none",
-                  boxShadow:
-                    "0 8px 20px rgba(60, 50, 35, 0.10)",
-                }}
-              >
-                {
-                  communication.button_text
-                }
-              </a>
-            </div>
-          )}
-
-        <div
-          style={{
-            marginTop:
-              "38px",
-            paddingTop:
-              "22px",
-            borderTop:
-              `1px solid ${activeColor.color}20`,
-            textAlign:
-              "center",
-          }}
-        >
-          <span
-            style={{
-              fontFamily:
-                "'Montserrat', sans-serif",
-              fontSize:
-                "0.68rem",
-              letterSpacing:
-                "0.14em",
-              textTransform:
-                "uppercase",
-              color:
-                "#99918A",
-            }}
-          >
-            COMUNICA · EVENSSE
-          </span>
-        </div>
       </article>
-
-      <style>
-        {`
-          img {
-            max-width: 100%;
-            height: auto;
-          }
-
-          article p {
-            margin-left: 0;
-            margin-right: 0;
-          }
-
-          article img {
-            display: block;
-          }
-
-          article a {
-            overflow-wrap: anywhere;
-          }
-        `}
-      </style>
     </main>
   );
-}
-
-function escapeHtml(
-  value: string
-): string {
-  return value
-    .replace(
-      /&/g,
-      "&amp;"
-    )
-    .replace(
-      /</g,
-      "&lt;"
-    )
-    .replace(
-      />/g,
-      "&gt;"
-    )
-    .replace(
-      /"/g,
-      "&quot;"
-    )
-    .replace(
-      /'/g,
-      "&#039;"
-    );
 }
