@@ -23,7 +23,92 @@ export default async function MessagePage({ params }: Props) {
   const { id } = await params;
   const code = decodeURIComponent(id).trim();
 
-  // 1. Buscar el código del grupo familiar.
+  // Los enlaces de comunicaciones usan UUID; los de mesas usan códigos.
+  const isUUID =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      code
+    );
+
+  if (isUUID) {
+    const { data, error } = await supabase
+      .from("communications")
+      .select(
+        "id, title, message, content_html, color_theme, typography, button_text, button_url, is_published"
+      )
+      .eq("id", code)
+      .eq("is_published", true)
+      .maybeSingle();
+
+    if (error) {
+      console.error("Error buscando comunicación:", error);
+      throw new Error("No fue posible consultar la comunicación.");
+    }
+
+    if (!data) notFound();
+
+    return (
+      <main
+        style={{
+          minHeight: "100vh",
+          padding: "40px 18px",
+          background: "#F7F5EF",
+          color: "#4F5142",
+          fontFamily: data.typography || "Georgia, serif",
+        }}
+      >
+        <article
+          style={{
+            maxWidth: "650px",
+            margin: "0 auto",
+            padding: "36px 26px",
+            background: "#FFFFFF",
+            border: "1px solid #E6E3D9",
+            borderRadius: "22px",
+            boxShadow: "0 8px 30px rgba(0,0,0,0.04)",
+          }}
+        >
+          <h1
+            style={{
+              textAlign: "center",
+              fontSize: "32px",
+              fontWeight: 400,
+              margin: "0 0 24px",
+            }}
+          >
+            {data.title}
+          </h1>
+
+          {data.content_html ? (
+            <div dangerouslySetInnerHTML={{ __html: data.content_html }} />
+          ) : (
+            <p style={{ whiteSpace: "pre-wrap", lineHeight: 1.8 }}>
+              {data.message}
+            </p>
+          )}
+
+          {data.button_text && data.button_url && (
+            <p style={{ textAlign: "center", marginTop: "28px" }}>
+              <a
+                href={data.button_url}
+                style={{
+                  display: "inline-block",
+                  padding: "12px 22px",
+                  borderRadius: "10px",
+                  background: data.color_theme || "#596047",
+                  color: "#FFFFFF",
+                  textDecoration: "none",
+                }}
+              >
+                {data.button_text}
+              </a>
+            </p>
+          )}
+        </article>
+      </main>
+    );
+  }
+
+  // Desde aquí continúa la página de asignación de mesas.
   const { data: groupCode, error: codeError } = await supabase
     .from("table_group_codes")
     .select("event_id, principal_person_id, code")
@@ -35,11 +120,8 @@ export default async function MessagePage({ params }: Props) {
     throw new Error("No fue posible consultar el código de acceso.");
   }
 
-  if (!groupCode) {
-    notFound();
-  }
+  if (!groupCode) notFound();
 
-  // 2. Encontrar al titular del grupo.
   const { data: principal, error: principalError } = await supabase
     .from("people")
     .select("id, name, event_id, titular_name")
@@ -52,11 +134,8 @@ export default async function MessagePage({ params }: Props) {
     throw new Error("No fue posible consultar los datos del titular.");
   }
 
-  if (!principal) {
-    notFound();
-  }
+  if (!principal) notFound();
 
-  // 3. Obtener los integrantes del grupo familiar.
   const { data: eventPeople, error: peopleError } = await supabase
     .from("people")
     .select("id, name, event_id, titular_name")
@@ -75,9 +154,7 @@ export default async function MessagePage({ params }: Props) {
       (person.titular_name ?? "").trim() === principalName
   );
 
-  // 4. Buscar las mesas asignadas a esos integrantes.
   const memberIds = members.map((person) => person.id);
-
   let assignments: Assignment[] = [];
 
   if (memberIds.length > 0) {
@@ -95,7 +172,6 @@ export default async function MessagePage({ params }: Props) {
     assignments = (data ?? []) as Assignment[];
   }
 
-  // 5. Consultar el nombre de la celebración.
   const { data: event, error: eventError } = await supabase
     .from("events")
     .select("name")
@@ -211,7 +287,6 @@ export default async function MessagePage({ params }: Props) {
                 }}
               >
                 <span style={{ lineHeight: 1.5 }}>{person.name}</span>
-
                 <span
                   style={{
                     flexShrink: 0,
