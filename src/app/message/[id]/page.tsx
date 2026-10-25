@@ -19,11 +19,84 @@ type Assignment = {
   table_name: string | null;
 };
 
+type Communication = {
+  id: string;
+  title: string;
+  message: string | null;
+  content_html: string | null;
+  color_theme: string | null;
+  typography: string | null;
+  button_text: string | null;
+  button_url: string | null;
+  is_published: boolean;
+};
+
+const colorThemes: Record<
+  string,
+  {
+    color: string;
+    soft: string;
+    border: string;
+  }
+> = {
+  salvia: {
+    color: "#A7A98A",
+    soft: "#EEF0E7",
+    border: "#A7A98A",
+  },
+  lavanda: {
+    color: "#B8A5BD",
+    soft: "#F1EBF3",
+    border: "#B8A5BD",
+  },
+  terracota: {
+    color: "#C97A5B",
+    soft: "#F6E9E3",
+    border: "#C97A5B",
+  },
+  arena: {
+    color: "#D8C4A4",
+    soft: "#F5EFE6",
+    border: "#D8C4A4",
+  },
+  "azul-niebla": {
+    color: "#7890A1",
+    soft: "#E9EFF2",
+    border: "#7890A1",
+  },
+  vino: {
+    color: "#76283A",
+    soft: "#F1E4E7",
+    border: "#76283A",
+  },
+};
+
+const typographyOptions: Record<
+  string,
+  {
+    fontFamily: string;
+  }
+> = {
+  editorial: {
+    fontFamily: "'Cormorant Garamond', serif",
+  },
+  clasica: {
+    fontFamily: "'Playfair Display', serif",
+  },
+  contemporanea: {
+    fontFamily: "'Montserrat', sans-serif",
+  },
+  romantica: {
+    fontFamily: "'Allura', cursive",
+  },
+};
+
 export default async function MessagePage({ params }: Props) {
   const { id } = await params;
   const code = decodeURIComponent(id).trim();
 
-  // Los enlaces de comunicaciones usan UUID; los de mesas usan códigos.
+  // Los UUID corresponden a comunicaciones de COMUNICA.
+  // Los códigos alfanuméricos corresponden a asignaciones de mesas.
   const isUUID =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
       code
@@ -44,71 +117,152 @@ export default async function MessagePage({ params }: Props) {
       throw new Error("No fue posible consultar la comunicación.");
     }
 
-    if (!data) notFound();
+    if (!data) {
+      notFound();
+    }
+
+    const communication = data as Communication;
+
+    const activeColor =
+      colorThemes[communication.color_theme || "lavanda"] ||
+      colorThemes.lavanda;
+
+    const activeTypography =
+      typographyOptions[
+        communication.typography || "editorial"
+      ] || typographyOptions.editorial;
+
+    const htmlContent = communication.content_html?.trim();
 
     return (
       <main
+        className="public-message-main"
         style={{
           minHeight: "100vh",
-          padding: "40px 18px",
-          background: "#F7F5EF",
-          color: "#4F5142",
-          fontFamily: data.typography || "Georgia, serif",
+          boxSizing: "border-box",
+          padding: "24px 12px 40px",
+          background: `linear-gradient(
+            180deg,
+            ${activeColor.soft} 0%,
+            #FAF8F3 48%,
+            #FAF8F3 100%
+          )`,
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "flex-start",
         }}
       >
         <article
+          className="public-message-card"
           style={{
-            maxWidth: "650px",
-            margin: "0 auto",
-            padding: "36px 26px",
-            background: "#FFFFFF",
-            border: "1px solid #E6E3D9",
-            borderRadius: "22px",
-            boxShadow: "0 8px 30px rgba(0,0,0,0.04)",
+            width: "100%",
+            maxWidth: "680px",
+            marginTop: "3vh",
+            background: "var(--color-surface, #FFFFFF)",
+            border: `1.5px solid ${activeColor.border}`,
+            borderRadius: "24px",
+            padding: "32px 24px",
+            boxSizing: "border-box",
+            boxShadow: "0 16px 45px rgba(60, 50, 35, 0.06)",
+            minWidth: 0,
           }}
         >
-          <h1
+          <p
             style={{
-              textAlign: "center",
-              fontSize: "32px",
-              fontWeight: 400,
-              margin: "0 0 24px",
+              margin: 0,
+              fontFamily: "var(--font-body, Arial, sans-serif)",
+              fontSize: "0.7rem",
+              letterSpacing: "0.2em",
+              textTransform: "uppercase",
+              color: activeColor.color,
             }}
           >
-            {data.title}
+            EVENSSE · COMUNICA
+          </p>
+
+          <h1
+            style={{
+              margin: "16px 0 0",
+              fontFamily: activeTypography.fontFamily,
+              fontSize: "clamp(2rem, 6vw, 3.4rem)",
+              fontWeight: 500,
+              lineHeight: 1.08,
+              color: activeColor.color,
+              letterSpacing: "-0.02em",
+              overflowWrap: "anywhere",
+            }}
+          >
+            {communication.title}
           </h1>
 
-          {data.content_html ? (
-            <div dangerouslySetInnerHTML={{ __html: data.content_html }} />
-          ) : (
-            <p style={{ whiteSpace: "pre-wrap", lineHeight: 1.8 }}>
-              {data.message}
-            </p>
-          )}
+          <div
+            style={{
+              width: "54px",
+              height: "1px",
+              margin: "24px 0 28px",
+              background: activeColor.color,
+            }}
+          />
 
-          {data.button_text && data.button_url && (
-            <p style={{ textAlign: "center", marginTop: "28px" }}>
+          <div
+            className="public-message-content"
+            style={{
+              width: "100%",
+              minWidth: 0,
+              fontFamily: activeTypography.fontFamily,
+              fontSize: "1.05rem",
+              lineHeight: 1.75,
+              color: "var(--color-text-secondary, #665D54)",
+              overflowWrap: "anywhere",
+            }}
+          >
+            {htmlContent ? (
+              <div
+                dangerouslySetInnerHTML={{
+                  __html: htmlContent,
+                }}
+              />
+            ) : (
+              <div style={{ whiteSpace: "pre-wrap" }}>
+                {communication.message ?? ""}
+              </div>
+            )}
+          </div>
+
+          {communication.button_text &&
+            communication.button_url && (
               <a
-                href={data.button_url}
+                href={communication.button_url}
+                target="_blank"
+                rel="noopener noreferrer"
                 style={{
-                  display: "inline-block",
-                  padding: "12px 22px",
-                  borderRadius: "10px",
-                  background: data.color_theme || "#596047",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginTop: "28px",
+                  minHeight: "48px",
+                  maxWidth: "100%",
+                  boxSizing: "border-box",
+                  padding: "0 22px",
+                  borderRadius: "999px",
+                  background: activeColor.color,
                   color: "#FFFFFF",
+                  fontFamily: "var(--font-body, Arial, sans-serif)",
+                  fontSize: "0.92rem",
+                  fontWeight: 500,
                   textDecoration: "none",
+                  overflowWrap: "anywhere",
                 }}
               >
-                {data.button_text}
+                {communication.button_text}
               </a>
-            </p>
-          )}
+            )}
         </article>
       </main>
     );
   }
 
-  // Desde aquí continúa la página de asignación de mesas.
+  // A partir de aquí se conserva la lógica de asignaciones de mesas.
   const { data: groupCode, error: codeError } = await supabase
     .from("table_group_codes")
     .select("event_id, principal_person_id, code")
@@ -120,8 +274,11 @@ export default async function MessagePage({ params }: Props) {
     throw new Error("No fue posible consultar el código de acceso.");
   }
 
-  if (!groupCode) notFound();
+  if (!groupCode) {
+    notFound();
+  }
 
+  // Encontrar al titular del grupo.
   const { data: principal, error: principalError } = await supabase
     .from("people")
     .select("id, name, event_id, titular_name")
@@ -134,8 +291,11 @@ export default async function MessagePage({ params }: Props) {
     throw new Error("No fue posible consultar los datos del titular.");
   }
 
-  if (!principal) notFound();
+  if (!principal) {
+    notFound();
+  }
 
+  // Obtener los integrantes del grupo familiar.
   const { data: eventPeople, error: peopleError } = await supabase
     .from("people")
     .select("id, name, event_id, titular_name")
@@ -154,6 +314,7 @@ export default async function MessagePage({ params }: Props) {
       (person.titular_name ?? "").trim() === principalName
   );
 
+  // Buscar las mesas asignadas a los integrantes.
   const memberIds = members.map((person) => person.id);
   let assignments: Assignment[] = [];
 
@@ -172,6 +333,7 @@ export default async function MessagePage({ params }: Props) {
     assignments = (data ?? []) as Assignment[];
   }
 
+  // Consultar el nombre de la celebración.
   const { data: event, error: eventError } = await supabase
     .from("events")
     .select("name")
@@ -287,6 +449,7 @@ export default async function MessagePage({ params }: Props) {
                 }}
               >
                 <span style={{ lineHeight: 1.5 }}>{person.name}</span>
+
                 <span
                   style={{
                     flexShrink: 0,
