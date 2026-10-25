@@ -190,6 +190,7 @@ export default async function MessagePage({ params }: Props) {
               color: activeColor.color,
               letterSpacing: "-0.02em",
               overflowWrap: "anywhere",
+              textAlign: "center",
             }}
           >
             {communication.title}
