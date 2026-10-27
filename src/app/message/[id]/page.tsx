@@ -167,43 +167,65 @@ export default async function MessagePage({ params }: Props) {
             minWidth: 0,
           }}
         >
-          <p
+          <div
             style={{
-              margin: 0,
-              fontFamily: "var(--font-body, Arial, sans-serif)",
-              fontSize: "0.7rem",
-              letterSpacing: "0.2em",
-              textTransform: "uppercase",
-              color: activeColor.color,
-              textAlign: "center",
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
               width: "100%",
-            }}
-          >
-            EVENSSE · COMUNICA
-          </p>
-
-          <h1
-            style={{
-              margin: "16px 0 0",
-              fontFamily: activeTypography.fontFamily,
-              fontSize: "clamp(2rem, 6vw, 3.4rem)",
-              fontWeight: 500,
-              lineHeight: 1.08,
-              color: activeColor.color,
-              letterSpacing: "-0.02em",
-              overflowWrap: "anywhere",
               textAlign: "center",
             }}
           >
-            {communication.title}
-          </h1>
+            <p
+              style={{
+                display: "block",
+                width: "100%",
+                margin: 0,
+                fontFamily: "var(--font-body, Arial, sans-serif)",
+                fontSize: "0.7rem",
+                letterSpacing: "0.2em",
+                textTransform: "uppercase",
+                color: "#E9A6C6",
+                textAlign: "center",
+              }}
+            >
+              EVENSSE · COMUNICA
+            </p>
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              width: "100%",
+              textAlign: "center",
+            }}
+          >
+            <h1
+              style={{
+                display: "block",
+                width: "100%",
+                margin: "16px 0 0",
+                fontFamily: activeTypography.fontFamily,
+                fontSize: "clamp(2rem, 6vw, 3.4rem)",
+                fontWeight: 500,
+                lineHeight: 1.08,
+                color: "#E9A6C6",
+                letterSpacing: "-0.02em",
+                overflowWrap: "anywhere",
+                textAlign: "center",
+              }}
+            >
+              {communication.title}
+            </h1>
+          </div>
 
           <div
             style={{
               width: "54px",
               height: "1px",
-              margin: "24px 0 28px",
-              background: activeColor.color,
+              margin: "24px auto 28px",
+              background: "#E9A6C6",
             }}
           />
 
