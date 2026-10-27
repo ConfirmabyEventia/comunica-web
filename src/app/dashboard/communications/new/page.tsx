@@ -86,13 +86,21 @@ const colorThemes: ColorTheme[] = [
     color: "#7890A1",
     soft: "#E9EFF2",
   },
+  
   {
     id: "vino",
     name: "Vino",
     color: "#76283A",
     soft: "#F1E4E7",
   },
+  {
+    id: "rosa",
+    name: "Rosa",
+    color: "#E9A6C6",
+    soft: "#FBEFF4",
+  },
 ];
+
 
 const typographyOptions: Typography[] = [
   {
@@ -420,20 +428,43 @@ const textSizes = [
       anchor.style.color = activeColor.color;
       anchor.style.textDecoration = "underline";
       anchor.style.fontWeight = "600";
+
+      // Insertar el enlace y una vista previa del PDF en el contenido.
+      // Así se guarda el documento junto con el mensaje personalizado.
+      const embed = document.createElement("iframe");
+      embed.src = data.publicUrl;
+      embed.title = `Documento adjunto: ${file.name}`;
+      embed.setAttribute("width", "100%");
+      embed.setAttribute("height", "800");
+      embed.setAttribute("loading", "lazy");
+      embed.style.display = "block";
+      embed.style.width = "100%";
+      embed.style.maxWidth = "100%";
+      embed.style.height = "800px";
+      embed.style.border = "1px solid #E5DED5";
+      embed.style.borderRadius = "12px";
+      embed.style.margin = "16px 0";
+
       const selection = window.getSelection();
       const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
       if (range && editor.contains(range.commonAncestorContainer)) {
         range.deleteContents();
         range.insertNode(anchor);
-        range.setStartAfter(anchor);
-        range.collapse(true);
+        anchor.after(document.createElement("br"));
+        anchor.after(embed);
+        const spacer = document.createElement("br");
+        embed.after(spacer);
+        const newRange = document.createRange();
+        newRange.setStartAfter(spacer);
+        newRange.collapse(true);
         selection?.removeAllRanges();
-        selection?.addRange(range);
+        selection?.addRange(newRange);
       } else {
         editor.appendChild(anchor);
+        editor.appendChild(document.createElement("br"));
+        editor.appendChild(embed);
+        editor.appendChild(document.createElement("br"));
       }
-      const spacer = document.createElement("br");
-      anchor.after(spacer);
       updateContent();
       saveCurrentSelection();
     } catch (err) {
@@ -596,6 +627,45 @@ const textSizes = [
     selectedImage.style.height = "auto";
 
     updateContent();
+  }
+
+  function insertImageLink() {
+    if (!selectedImage || !selectedImage.isConnected) {
+      window.alert("Primero selecciona una imagen dentro del mensaje.");
+      return;
+    }
+
+    const existingAnchor = selectedImage.closest("a");
+    const currentUrl = existingAnchor?.getAttribute("href") || "https://";
+    const enteredUrl = window.prompt(
+      "Pega el enlace al que llevará la imagen:",
+      currentUrl
+    );
+
+    if (enteredUrl === null) return;
+
+    const url = enteredUrl.trim();
+    if (!/^https?:\/\//i.test(url)) {
+      window.alert("El enlace debe comenzar por https:// o http://.");
+      return;
+    }
+
+    let anchor = existingAnchor;
+    if (!anchor) {
+      anchor = document.createElement("a");
+      selectedImage.parentNode?.insertBefore(anchor, selectedImage);
+      anchor.appendChild(selectedImage);
+    }
+
+    anchor.href = url;
+    anchor.target = "_blank";
+    anchor.rel = "noopener noreferrer";
+    anchor.style.display = "block";
+    anchor.style.textDecoration = "none";
+    anchor.style.cursor = "pointer";
+
+    updateContent();
+    saveCurrentSelection();
   }
 
   async function loadTemplates() {
@@ -2289,6 +2359,22 @@ const textSizes = [
                       "#FBF9F4",
                   }}
                 >
+                  <button
+                    type="button"
+                    onClick={insertImageLink}
+                    style={{
+                      border: `1px solid ${activeColor.color}`,
+                      borderRadius: "999px",
+                      padding: "7px 12px",
+                      background: activeColor.soft,
+                      color: activeColor.color,
+                      fontSize: "0.76rem",
+                      cursor: "pointer",
+                    }}
+                  >
+                    🔗 Agregar enlace a imagen
+                  </button>
+
                   <span
                     style={{
                       marginRight:
