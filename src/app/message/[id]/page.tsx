@@ -175,6 +175,8 @@ export default async function MessagePage({ params }: Props) {
               letterSpacing: "0.2em",
               textTransform: "uppercase",
               color: activeColor.color,
+              textAlign: "center",
+              width: "100%",
             }}
           >
             EVENSSE · COMUNICA
