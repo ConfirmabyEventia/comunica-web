@@ -127,6 +127,11 @@ export default async function MessagePage({ params }: Props) {
       colorThemes[communication.color_theme || "lavanda"] ||
       colorThemes.lavanda;
 
+      console.log("DEBUG COMUNICA:", {
+  temaGuardado: communication.color_theme,
+  colorAplicado: activeColor.color,
+});
+
     const activeTypography =
       typographyOptions[
         communication.typography || "editorial"
