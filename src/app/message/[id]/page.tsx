@@ -190,7 +190,7 @@ export default async function MessagePage({ params }: Props) {
                 fontSize: "0.7rem",
                 letterSpacing: "0.2em",
                 textTransform: "uppercase",
-                color: "#E9A6C6",
+                color: activeColor.color,
                 textAlign: "center",
               }}
             >
@@ -215,7 +215,7 @@ export default async function MessagePage({ params }: Props) {
                 fontSize: "clamp(2rem, 6vw, 3.4rem)",
                 fontWeight: 500,
                 lineHeight: 1.08,
-                color: "#E9A6C6",
+                color: activeColor.color,
                 letterSpacing: "-0.02em",
                 overflowWrap: "anywhere",
                 textAlign: "center",
@@ -230,7 +230,7 @@ export default async function MessagePage({ params }: Props) {
               width: "54px",
               height: "1px",
               margin: "24px auto 28px",
-              background: "#E9A6C6",
+              background: activeColor.color,
             }}
           />
 
