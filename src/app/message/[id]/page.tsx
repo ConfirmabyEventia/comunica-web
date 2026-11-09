@@ -39,6 +39,11 @@ const colorThemes: Record<
     border: string;
   }
 > = {
+  rosa: {
+    color: "#D98BA8",
+    soft: "#FCEEF3",
+    border: "#D98BA8",
+  },
   salvia: {
     color: "#A7A98A",
     soft: "#EEF0E7",
