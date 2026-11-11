@@ -1,3 +1,4 @@
+
 import type { Metadata } from "next";
 import {
   Allura,
@@ -8,6 +9,10 @@ import {
 } from "next/font/google";
 
 import "./globals.css";
+
+/* =========================================================
+   COMUNICA STUDIO FONTS
+========================================================= */
 
 const cormorant = Cormorant_Garamond({
   subsets: ["latin"],
@@ -40,11 +45,43 @@ const inter = Inter({
   variable: "--font-body",
 });
 
+/* =========================================================
+   METADATA - COMUNICA STUDIO PWA
+========================================================= */
+
 export const metadata: Metadata = {
-  title: "COMUNICA | EVENSSE",
+  title: "COMUNICA STUDIO by EVENSSE",
   description:
     "Comunicación clara, justo cuando tus invitados la necesitan.",
+  applicationName: "COMUNICA STUDIO",
+  manifest: "/manifest.webmanifest",
+
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "COMUNICA",
+  },
+
+  icons: {
+    icon: [
+      {
+        url: "/icons/icon-192.png",
+        sizes: "192x192",
+        type: "image/png",
+      },
+      {
+        url: "/icons/icon-512.png",
+        sizes: "512x512",
+        type: "image/png",
+      },
+    ],
+    apple: "/icons/icon-192.png",
+  },
 };
+
+/* =========================================================
+   ROOT LAYOUT
+========================================================= */
 
 export default function RootLayout({
   children,
