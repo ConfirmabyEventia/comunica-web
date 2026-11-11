@@ -1038,6 +1038,7 @@ const textSizes = [
       <Sidebar />
 
       <main
+        className="comunica-editor-main"
         style={{
           flex: 1,
           minWidth: 0,
@@ -1385,6 +1386,7 @@ const textSizes = [
           {/* MAIN GRID */}
 
           <div
+            className="comunica-main-grid"
             style={{
               display: "grid",
               gridTemplateColumns:
@@ -1396,6 +1398,7 @@ const textSizes = [
             {/* LEFT */}
 
             <section
+              className="comunica-editor-panel"
               style={{
                 background:
                   "var(--color-surface)",
@@ -1624,6 +1627,7 @@ const textSizes = [
                 </p>
 
                 <div
+                  className="comunica-color-grid"
                   style={{
                     display: "grid",
                     gridTemplateColumns:
@@ -1733,6 +1737,7 @@ const textSizes = [
                 </p>
 
                 <div
+                  className="comunica-typography-grid"
                   style={{
                     display: "grid",
                     gridTemplateColumns:
@@ -2546,6 +2551,7 @@ const textSizes = [
             {/* RIGHT / PREVIEW */}
 
             <section
+              className="comunica-preview-panel"
               style={{
                 background:
                   "#FBF9F4",

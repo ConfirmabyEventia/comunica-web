@@ -1,29 +1,24 @@
 :root {
   --color-background: #faf8f3;
   --color-surface: #ffffff;
-
   --color-primary: #d2c2a3;
   --color-primary-soft: #e3d8c2;
   --color-accent: #bdaa82;
-
   --color-text: #38332c;
   --color-text-secondary: #70695e;
   --color-text-muted: #999184;
-
   --color-border: #eae4d8;
-
   --font-display: var(--font-editorial);
 }
 
-* {
-  box-sizing: border-box;
-}
+* { box-sizing: border-box; }
 
-html,
-body {
+html, body {
   margin: 0;
   padding: 0;
   min-height: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 body {
@@ -33,18 +28,226 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-button,
-input,
-textarea,
-select {
-  font: inherit;
+button, input, textarea, select { font: inherit; }
+button { cursor: pointer; }
+a { color: inherit; text-decoration: none; }
+
+/* MENSAJES PÚBLICOS */
+.public-message-main { width: 100%; }
+.public-message-card { min-width: 0; }
+.public-message-content {
+  width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.public-message-content img,
+.public-message-content video {
+  max-width: 100%;
+  height: auto;
+}
+.public-message-content iframe {
+  display: block;
+  width: 100% !important;
+  max-width: 100%;
+  border: 1px solid #E5DED5;
+  border-radius: 12px;
+}
+.public-message-content a { overflow-wrap: anywhere; }
+
+/* NAVEGACIÓN MÓVIL */
+.comunica-mobile-header,
+.comunica-mobile-drawer,
+.comunica-mobile-backdrop { display: none; }
+
+@media (max-width: 768px) {
+  .comunica-desktop-sidebar { display: none !important; }
+
+  .comunica-mobile-header {
+    display: flex;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    height: 72px;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 18px;
+    background: #fff;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .comunica-mobile-backdrop {
+    display: block;
+    position: fixed;
+    inset: 72px 0 0;
+    z-index: 101;
+    width: 100%;
+    border: 0;
+    background: rgba(35, 30, 28, .28);
+  }
+
+  .comunica-mobile-drawer {
+    display: block;
+    position: fixed;
+    top: 72px;
+    right: 0;
+    bottom: 0;
+    z-index: 102;
+    width: min(300px, 85vw);
+    overflow-y: auto;
+    padding: 24px 18px;
+    background: #fff;
+    box-shadow: -8px 12px 28px rgba(0, 0, 0, .08);
+  }
+
+  .comunica-editor-main {
+    width: 100%;
+    min-width: 0;
+    padding: 96px 16px 40px !important;
+  }
+
+  .comunica-main-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 18px !important;
+  }
+
+  .comunica-editor-panel,
+  .comunica-preview-panel {
+    width: 100%;
+    min-width: 0;
+    padding: 22px 16px !important;
+    border-radius: 20px !important;
+  }
+
+  .comunica-color-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  .comunica-typography-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  .comunica-color-grid button,
+  .comunica-typography-grid button {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .comunica-preview-panel {
+    position: static !important;
+  }
 }
 
-button {
-  cursor: pointer;
+@media (max-width: 480px) {
+  .public-message-main { padding: 12px 8px 24px !important; }
+  .public-message-card {
+    margin-top: 0 !important;
+    padding: 22px 12px !important;
+    border-radius: 18px !important;
+  }
+  .public-message-content iframe {
+    height: 75vh !important;
+    min-height: 450px;
+  }
+}
+/* CORRECCIÓN DEFINITIVA: EDITOR MÓVIL */
+@media screen and (max-width: 768px) {
+  main.comunica-editor-main .comunica-main-grid {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-auto-flow: row !important;
+    align-items: start !important;
+    gap: 24px !important;
+    position: relative !important;
+    overflow: visible !important;
+  }
+
+  main.comunica-editor-main .comunica-main-grid > .comunica-editor-panel {
+    grid-column: 1 !important;
+    grid-row: 1 !important;
+    position: relative !important;
+    inset: auto !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    transform: none !important;
+    z-index: 1 !important;
+  }
+
+  main.comunica-editor-main .comunica-main-grid > .comunica-preview-panel {
+    grid-column: 1 !important;
+    grid-row: 2 !important;
+    position: relative !important;
+    top: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    left: auto !important;
+    inset: auto !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    height: auto !important;
+    align-self: start !important;
+    transform: none !important;
+    margin: 0 !important;
+    z-index: 1 !important;
+  }
 }
 
-a {
-  color: inherit;
-  text-decoration: none;
+@media screen and (max-width: 480px) {
+  main.comunica-editor-main {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+}
+/* COMUNICA: EDITOR EN TABLETAS Y PANTALLAS ESTRECHAS */
+@media screen and (max-width: 1100px) {
+  main.comunica-editor-main .comunica-main-grid {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-auto-flow: row !important;
+    align-items: start !important;
+    gap: 24px !important;
+    width: 100% !important;
+    overflow: visible !important;
+  }
+
+  main.comunica-editor-main .comunica-main-grid > .comunica-editor-panel {
+    grid-column: 1 !important;
+    grid-row: 1 !important;
+    position: relative !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    transform: none !important;
+    z-index: 1 !important;
+  }
+
+  main.comunica-editor-main .comunica-main-grid > .comunica-preview-panel {
+    grid-column: 1 !important;
+    grid-row: 2 !important;
+    position: relative !important;
+    top: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    left: auto !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    height: auto !important;
+    transform: none !important;
+    margin: 0 !important;
+    z-index: 1 !important;
+  }
+
+  main.comunica-editor-main {
+    min-width: 0 !important;
+    padding-left: 20px !important;
+    padding-right: 20px !important;
+  }
+
+  main.comunica-editor-main > div {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
 }
